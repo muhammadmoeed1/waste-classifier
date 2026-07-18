@@ -1,0 +1,16 @@
+[project]
+name = "waste-classifier"
+version = "2.0.0"
+description = "AI-powered waste classifier with a Groq-backed recycling assistant (RAG)"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

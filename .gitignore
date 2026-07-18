@@ -1,0 +1,20 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+
+# Dataset (download separately per README, not committed)
+data/dataset/
+
+# Large training history not needed for the repo
+artifacts/metrics/training_history.json
+
+# OS
+.DS_Store
+Thumbs.db

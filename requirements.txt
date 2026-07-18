@@ -1,0 +1,16 @@
+# Core ML
+tensorflow>=2.16
+numpy
+pillow
+scikit-learn
+matplotlib
+
+# API / backend
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+python-dotenv
+
+# GenAI
+groq

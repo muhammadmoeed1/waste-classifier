@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Waste Classifier</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="logo-ring"><i class="fas fa-recycle"></i></div>
+    <h1>Smart Waste Classifier</h1>
+    <p>Upload a photo to identify its waste category, then ask the AI assistant<br>anything about how to recycle it.</p>
+  </div>
+
+  <!-- Classification card -->
+  <div class="card">
+    <div class="upload-zone" id="uploadZone">
+      <i class="fas fa-cloud-arrow-up"></i>
+      <div class="uz-title">Drop an image here</div>
+      <div class="uz-sub">or click to browse &mdash; JPG, PNG, WEBP</div>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="preview-wrap" id="previewWrap">
+      <img id="previewImg" alt="Selected image">
+    </div>
+    <p class="fname" id="fname">
+      <i class="fas fa-file-image"></i><span id="fnameText"></span>
+    </p>
+
+    <div class="btn-row">
+      <button type="button" class="btn" id="classifyBtn" disabled>
+        <i class="fas fa-magnifying-glass"></i> Classify waste
+      </button>
+      <button type="button" class="btn-clear" id="clearBtn">
+        <i class="fas fa-xmark"></i> Clear
+      </button>
+    </div>
+
+    <p class="error" id="errorMsg" style="display:none;"></p>
+
+    <div class="result-section" id="resultSection" style="display:none;">
+      <hr>
+      <div class="result-top">
+        <div class="result-label" id="resultLabel"></div>
+        <div class="badge" id="resultBadge"></div>
+      </div>
+
+      <div class="conf-row">
+        <span class="conf-label">Confidence</span>
+        <span class="conf-val" id="confVal"></span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="confBar"></div></div>
+
+      <div class="probs" id="probsList"></div>
+    </div>
+  </div>
+
+  <!-- Category pills -->
+  <div class="categories">
+    <div class="cats-label">Detectable categories</div>
+    <div class="cats-grid" id="catsGrid">
+      <div class="cat-item" data-cat="cardboard"><span class="ci-icon">📦</span><span class="ci-name">Cardboard</span></div>
+      <div class="cat-item" data-cat="glass"><span class="ci-icon">🍾</span><span class="ci-name">Glass</span></div>
+      <div class="cat-item" data-cat="metal"><span class="ci-icon">🥫</span><span class="ci-name">Metal</span></div>
+      <div class="cat-item" data-cat="paper"><span class="ci-icon">📄</span><span class="ci-name">Paper</span></div>
+      <div class="cat-item" data-cat="plastic"><span class="ci-icon">♻️</span><span class="ci-name">Plastic</span></div>
+      <div class="cat-item" data-cat="trash"><span class="ci-icon">🗑️</span><span class="ci-name">Trash</span></div>
+    </div>
+  </div>
+
+  <!-- Chat assistant -->
+  <div class="card chat-card">
+    <div class="chat-header">
+      <i class="fas fa-robot"></i>
+      <div>
+        <div class="chat-title">Recycling Assistant</div>
+        <div class="chat-sub">Powered by Groq &middot; ask about recycling rules, contamination, or your uploaded item</div>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-msg assistant">
+        <div class="bubble">Hi! Upload an image or just ask me a recycling question &mdash; e.g. "Can I recycle a greasy pizza box?"</div>
+      </div>
+    </div>
+
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="Ask about recycling..." />
+      <button id="chatSend" class="btn chat-send"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
