@@ -19,6 +19,13 @@ from waste_classifier import config
 
 
 def main() -> None:
+    # NOTE: shuffle must stay True (the default) here, matching train.py exactly.
+    # image_dataset_from_directory determines the validation_split slice from a
+    # seeded shuffle of the file list; passing shuffle=False disables that
+    # shuffle and instead takes a contiguous alphabetical tail-slice of files,
+    # which (since files are listed one class-directory at a time) silently
+    # drops entire classes from the "validation" set instead of reproducing
+    # the same stratified split used during training.
     val_ds = tf.keras.utils.image_dataset_from_directory(
         config.DATASET_DIR,
         validation_split=0.2,
@@ -26,7 +33,6 @@ def main() -> None:
         seed=123,
         image_size=config.IMG_SIZE,
         batch_size=32,
-        shuffle=False,
     )
     class_names = val_ds.class_names
 

@@ -1,0 +1,100 @@
+{
+  "accuracy": 0.8198,
+  "num_validation_samples": 505,
+  "per_class": {
+    "cardboard": {
+      "precision": 0.9036,
+      "recall": 0.9036,
+      "f1": 0.9036,
+      "support": 83
+    },
+    "glass": {
+      "precision": 0.8444,
+      "recall": 0.7379,
+      "f1": 0.7876,
+      "support": 103
+    },
+    "metal": {
+      "precision": 0.8608,
+      "recall": 0.8718,
+      "f1": 0.8662,
+      "support": 78
+    },
+    "paper": {
+      "precision": 0.8966,
+      "recall": 0.8387,
+      "f1": 0.8667,
+      "support": 124
+    },
+    "plastic": {
+      "precision": 0.6818,
+      "recall": 0.8523,
+      "f1": 0.7576,
+      "support": 88
+    },
+    "trash": {
+      "precision": 0.5926,
+      "recall": 0.5517,
+      "f1": 0.5714,
+      "support": 29
+    }
+  },
+  "confusion_matrix": [
+    [
+      75,
+      0,
+      0,
+      4,
+      2,
+      2
+    ],
+    [
+      0,
+      76,
+      4,
+      0,
+      23,
+      0
+    ],
+    [
+      0,
+      7,
+      68,
+      1,
+      2,
+      0
+    ],
+    [
+      7,
+      1,
+      2,
+      104,
+      2,
+      8
+    ],
+    [
+      1,
+      6,
+      2,
+      3,
+      75,
+      1
+    ],
+    [
+      0,
+      0,
+      3,
+      4,
+      6,
+      16
+    ]
+  ],
+  "class_names": [
+    "cardboard",
+    "glass",
+    "metal",
+    "paper",
+    "plastic",
+    "trash"
+  ]
+}
