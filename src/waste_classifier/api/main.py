@@ -16,11 +16,16 @@ from waste_classifier import config
 from waste_classifier.api.schemas import (
     ChatRequest,
     ChatResponse,
+    EnvironmentalImpact,
     HealthResponse,
     PredictionResponse,
+    TranscriptionResponse,
 )
 from waste_classifier.genai import assistant
+from waste_classifier.genai.groq_client import get_client
+from waste_classifier.ml import impact as impact_module
 from waste_classifier.ml.classifier import classifier
+from waste_classifier.ml.explain import generate_gradcam
 from waste_classifier.rag.retriever import retriever
 
 logging.basicConfig(level=logging.INFO)
@@ -78,11 +83,32 @@ async def predict(image: UploadFile = File(...)) -> PredictionResponse:
         raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.") from exc
 
     result = classifier.predict(img)
+
+    gradcam_image = None
+    try:
+        gradcam_image = generate_gradcam(classifier.model, img, pred_index=result.label_index)
+    except Exception:
+        logger.exception("Grad-CAM generation failed; returning prediction without it")
+
+    fact = impact_module.get_impact(result.label)
+    impact_response = (
+        EnvironmentalImpact(
+            headline=fact.headline,
+            co2_saved_per_kg=fact.co2_saved_per_kg,
+            energy_saved_pct=fact.energy_saved_pct,
+            fact=fact.fact,
+        )
+        if fact
+        else None
+    )
+
     return PredictionResponse(
         label=result.label,
         confidence=result.confidence,
         recyclable=result.recyclable,
         probabilities=result.probabilities,
+        gradcam_image=gradcam_image,
+        impact=impact_response,
     )
 
 
@@ -94,6 +120,27 @@ def chat(request: ChatRequest) -> ChatResponse:
     history = [m.model_dump() for m in request.history]
     answer = assistant.ask(request.question, request.classification_label, history)
     return ChatResponse(answer=answer)
+
+
+@app.post("/api/transcribe", response_model=TranscriptionResponse)
+async def transcribe(audio: UploadFile = File(...)) -> TranscriptionResponse:
+    if not config.GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
+
+    contents = await audio.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="No audio data received.")
+
+    client = get_client()
+    try:
+        response = client.audio.transcriptions.create(
+            file=(audio.filename or "audio.webm", contents),
+            model="whisper-large-v3-turbo",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
+
+    return TranscriptionResponse(text=response.text)
 
 
 @app.post("/api/chat/stream")

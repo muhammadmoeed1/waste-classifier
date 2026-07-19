@@ -57,6 +57,21 @@
       <div class="bar-bg"><div class="bar-fill" id="confBar"></div></div>
 
       <div class="probs" id="probsList"></div>
+
+      <div class="gradcam-section" id="gradcamSection" style="display:none;">
+        <div class="section-label"><i class="fas fa-eye"></i> Where the model looked (Grad-CAM)</div>
+        <img id="gradcamImg" alt="Grad-CAM heatmap" class="gradcam-img">
+        <p class="gradcam-hint">Warmer colors (red/yellow) show the regions the AI focused on most to make this prediction.</p>
+      </div>
+
+      <div class="impact-section" id="impactSection" style="display:none;">
+        <div class="section-label"><i class="fas fa-leaf"></i> Environmental impact</div>
+        <div class="impact-card">
+          <div class="impact-headline" id="impactHeadline"></div>
+          <div class="impact-stats" id="impactStats"></div>
+          <p class="impact-fact" id="impactFact"></p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -91,6 +106,7 @@
 
     <div class="chat-input-row">
       <input type="text" id="chatInput" placeholder="Ask about recycling..." />
+      <button id="micBtn" class="btn-clear mic-btn" title="Ask by voice"><i class="fas fa-microphone"></i></button>
       <button id="chatSend" class="btn chat-send"><i class="fas fa-paper-plane"></i></button>
     </div>
   </div>

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Prediction:
     label: str
+    label_index: int
     confidence: float
     recyclable: bool
     probabilities: dict[str, float]
@@ -39,6 +40,14 @@ class WasteClassifier:
     @property
     def is_ready(self) -> bool:
         return self._model is not None
+
+    @property
+    def model(self):
+        return self._model
+
+    @property
+    def class_names(self) -> list[str]:
+        return list(self._class_names)
 
     def load(self) -> None:
         # Imported lazily: tensorflow is a heavy import and the API should be
@@ -72,6 +81,7 @@ class WasteClassifier:
 
         return Prediction(
             label=label,
+            label_index=idx,
             confidence=round(float(preds[idx]) * 100, 2),
             recyclable=label in config.RECYCLABLE_CLASSES,
             probabilities=probabilities,

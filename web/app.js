@@ -14,10 +14,17 @@ const confVal = document.getElementById('confVal');
 const confBar = document.getElementById('confBar');
 const probsList = document.getElementById('probsList');
 const catItems = document.querySelectorAll('.cat-item');
+const gradcamSection = document.getElementById('gradcamSection');
+const gradcamImg = document.getElementById('gradcamImg');
+const impactSection = document.getElementById('impactSection');
+const impactHeadline = document.getElementById('impactHeadline');
+const impactStats = document.getElementById('impactStats');
+const impactFact = document.getElementById('impactFact');
 
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const chatSend = document.getElementById('chatSend');
+const micBtn = document.getElementById('micBtn');
 
 let lastClassificationLabel = null;
 let chatHistory = [];
@@ -113,6 +120,30 @@ function showResult(data) {
   catItems.forEach(el => el.classList.toggle('active', el.dataset.cat === data.label));
   resultSection.style.display = 'block';
 
+  if (data.gradcam_image) {
+    gradcamImg.src = data.gradcam_image;
+    gradcamSection.style.display = 'block';
+  } else {
+    gradcamSection.style.display = 'none';
+  }
+
+  if (data.impact) {
+    impactHeadline.textContent = data.impact.headline;
+    impactStats.innerHTML = '';
+    if (data.impact.co2_saved_per_kg != null) {
+      impactStats.innerHTML += `
+        <div class="impact-stat"><span class="val">${data.impact.co2_saved_per_kg} kg</span><span class="lbl">CO&#8322; saved / kg</span></div>`;
+    }
+    if (data.impact.energy_saved_pct != null) {
+      impactStats.innerHTML += `
+        <div class="impact-stat"><span class="val">${data.impact.energy_saved_pct}%</span><span class="lbl">Energy saved</span></div>`;
+    }
+    impactFact.textContent = data.impact.fact;
+    impactSection.style.display = 'block';
+  } else {
+    impactSection.style.display = 'none';
+  }
+
   addAssistantMessage(
     `I classified this as **${data.label}** (${data.confidence}% confidence). Ask me anything about how to recycle it!`
   );
@@ -190,4 +221,73 @@ async function sendChat() {
 chatSend.addEventListener('click', sendChat);
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendChat();
+});
+
+// --- Voice input (record -> Groq Whisper transcription -> fill chat input) ---
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(track => track.stop());
+      await transcribeAndFill();
+    };
+    mediaRecorder.start();
+    isRecording = true;
+    micBtn.classList.add('recording');
+  } catch (err) {
+    addAssistantMessage('Could not access your microphone: ' + (err.message || err));
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && isRecording) {
+    mediaRecorder.stop();
+    isRecording = false;
+    micBtn.classList.remove('recording');
+  }
+}
+
+async function transcribeAndFill() {
+  if (audioChunks.length === 0) return;
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+
+  micBtn.disabled = true;
+  micBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+  try {
+    const formData = new FormData();
+    formData.append('audio', blob, 'recording.webm');
+    const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.detail || `Request failed (${res.status})`);
+    }
+    const data = await res.json();
+    chatInput.value = data.text;
+    chatInput.focus();
+  } catch (err) {
+    addAssistantMessage('Voice transcription failed: ' + (err.message || 'something went wrong.'));
+  } finally {
+    micBtn.disabled = false;
+    micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+  }
+}
+
+micBtn.addEventListener('click', () => {
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    addAssistantMessage('Voice input is not supported in this browser.');
+    return;
+  }
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
 });

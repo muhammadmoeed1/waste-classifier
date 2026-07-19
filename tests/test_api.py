@@ -47,6 +47,38 @@ def test_predict_with_valid_image_or_503_if_model_missing(client):
         assert "label" in body
         assert "confidence" in body
         assert "probabilities" in body
+        # Grad-CAM explainability overlay
+        assert body["gradcam_image"] is None or body["gradcam_image"].startswith(
+            "data:image/png;base64,"
+        )
+        # Environmental impact facts are defined for every known class
+        assert body["impact"] is not None
+        assert "headline" in body["impact"]
+        assert "fact" in body["impact"]
+
+
+def test_transcribe_without_groq_key_returns_503(client, monkeypatch):
+    from waste_classifier import config
+
+    monkeypatch.setattr(config, "GROQ_API_KEY", "")
+    res = client.post(
+        "/api/transcribe",
+        files={"audio": ("test.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+    assert res.status_code == 503
+
+
+def test_transcribe_rejects_empty_audio(client):
+    from waste_classifier import config
+
+    if not config.GROQ_API_KEY:
+        return  # covered by test_transcribe_without_groq_key_returns_503
+
+    res = client.post(
+        "/api/transcribe",
+        files={"audio": ("test.webm", b"", "audio/webm")},
+    )
+    assert res.status_code == 400
 
 
 def test_chat_without_groq_key_returns_503_or_200(client, monkeypatch):

@@ -17,10 +17,16 @@ ask a RAG-grounded chatbot follow-up questions about how to recycle it.
 1. **Upload an image** of an item (cardboard, glass, metal, paper, plastic, or trash).
 2. A **fine-tuned MobileNetV2** CNN classifies it and returns a confidence score
    and per-class probability breakdown.
-3. Ask the **AI recycling assistant** (powered by [Groq](https://groq.com), backed
+3. **See *why* the model decided that** — a **Grad-CAM heatmap** overlays the
+   image showing exactly which pixels the network focused on, turning the CNN
+   from a black box into something you can visually audit.
+4. See the **environmental impact** of recycling that item (approximate CO₂ and
+   energy savings vs. producing it from raw material).
+5. Ask the **AI recycling assistant** (powered by [Groq](https://groq.com), backed
    by retrieval-augmented generation over a curated recycling knowledge base)
-   follow-up questions like *"can I recycle this if it's dirty?"* and get a
-   grounded, streamed answer.
+   follow-up questions like *"can I recycle this if it's dirty?"* — by **typing
+   or by voice** (speech is transcribed with Groq Whisper) — and get a grounded,
+   streamed answer.
 
 ## Architecture
 
@@ -28,10 +34,15 @@ ask a RAG-grounded chatbot follow-up questions about how to recycle it.
 flowchart TD
     U[User uploads image] --> API[FastAPI backend]
     API --> CV[MobileNetV2 classifier<br/>fine-tuned, TensorFlow/Keras]
-    CV --> API
-    API --> UI[Web UI: result + confidence chart]
+    CV --> XAI[Grad-CAM<br/>explainability heatmap]
+    CV --> IMP[Environmental impact<br/>lookup]
+    XAI --> API
+    IMP --> API
+    API --> UI[Web UI: result, heatmap,<br/>impact card, confidence chart]
 
-    Q[User asks a question] --> API
+    V[User speaks a question] --> WSP[Groq Whisper<br/>transcription]
+    WSP --> Q[Question text]
+    Q --> API
     API --> RAG[TF-IDF retriever<br/>over recycling knowledge base]
     RAG --> LLM[Groq LLM<br/>Llama 3.3 70B]
     LLM -->|streamed response| API
@@ -43,13 +54,25 @@ flowchart TD
 | Layer               | Technology                                                        |
 |---------------------|--------------------------------------------------------------------|
 | Computer vision     | TensorFlow / Keras, MobileNetV2 transfer learning + fine-tuning     |
+| Explainable AI       | Grad-CAM (gradient-based class activation mapping), implemented from scratch with `tf.GradientTape` |
 | Backend API         | FastAPI, Pydantic, Uvicorn                                          |
-| Generative AI       | Groq API (Llama 3.3 70B), streaming chat completions                |
+| Generative AI       | Groq API (Llama 3.3 70B) — streaming chat completions + Whisper speech-to-text |
 | Retrieval (RAG)     | Custom TF-IDF + cosine-similarity retriever (scikit-learn) over a markdown knowledge base |
-| Frontend            | Vanilla HTML/CSS/JS, server-sent streaming chat                     |
+| Frontend            | Vanilla HTML/CSS/JS, MediaRecorder voice capture, server-sent streaming chat |
 | Testing             | Pytest, FastAPI TestClient                                           |
 | Quality             | Ruff (lint)                                                          |
 | Packaging / deploy  | Docker, Docker Compose, GitHub Actions CI/CD, Hugging Face Spaces    |
+
+## Explainable AI: Grad-CAM
+
+Every prediction includes a **Grad-CAM heatmap** — computed with `tf.GradientTape`
+against the last convolutional layer of the MobileNetV2 backbone (`src/waste_classifier/ml/explain.py`) —
+so you can visually verify the model is actually looking at the object, not
+background artifacts or dataset bias:
+
+![Grad-CAM example](artifacts/metrics/gradcam_sample.png)
+
+*(Example: the model correctly focuses on the bottle body/cap when classifying "plastic".)*
 
 ## Model performance
 
@@ -87,8 +110,8 @@ improvement (class balancing / more data).
 waste-classifier/
 ├── src/waste_classifier/
 │   ├── api/            # FastAPI app, routes, request/response schemas
-│   ├── ml/              # training, evaluation, inference wrapper
-│   ├── genai/           # Groq client + recycling assistant
+│   ├── ml/              # training, evaluation, inference, Grad-CAM, impact facts
+│   ├── genai/           # Groq client + recycling assistant + Whisper transcription
 │   ├── rag/             # knowledge base loader + TF-IDF retriever
 │   └── config.py        # centralized configuration (env-driven)
 ├── data/
@@ -167,6 +190,12 @@ recommended) or Render, including an automated GitHub Actions deploy workflow.
   dependency for negligible quality gain at this scale.
 - Groq was chosen for the LLM layer for its generous free tier and very low
   latency, making the streamed chat experience feel instant.
+- Implemented Grad-CAM from scratch with `tf.GradientTape` (rather than pulling
+  in a black-box explainability library) to directly control which layer is
+  visualized and how it plugs into the existing Keras `Sequential` model.
+- Voice input reuses the same Groq account for speech-to-text (Whisper), so the
+  whole GenAI surface — chat, RAG, and transcription — runs through one
+  provider and one API key.
 
 ## License
 

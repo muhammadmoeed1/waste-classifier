@@ -113,6 +113,33 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 
 .error { color: var(--danger-fg); margin-top: 12px; font-size: 14px; }
 
+/* Grad-CAM + impact sections */
+.section-label {
+  font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .04em; margin: 1.25rem 0 8px; display: flex; align-items: center; gap: 6px;
+}
+.gradcam-img {
+  width: 100%; border-radius: 10px; border: 1px solid var(--border); display: block;
+}
+.gradcam-hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+.impact-card {
+  background: var(--accent-light); border: 1px solid var(--accent-border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.impact-headline { font-size: 14px; font-weight: 600; color: var(--accent-dark); margin-bottom: 8px; }
+.impact-stats { display: flex; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+.impact-stat { display: flex; flex-direction: column; }
+.impact-stat .val { font-size: 18px; font-weight: 700; color: var(--accent-dark); }
+.impact-stat .lbl { font-size: 11px; color: var(--muted); }
+.impact-fact { font-size: 13px; color: var(--fg); line-height: 1.6; }
+
+/* Voice input */
+.mic-btn { flex: 0 0 auto; width: 44px; padding: 10px; }
+.mic-btn.recording { background: var(--danger-bg); color: var(--danger-fg); border-color: var(--danger-fg); }
+.mic-btn.recording i { animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
 .categories { margin-bottom: 1.5rem; }
 .cats-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
 .cats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }

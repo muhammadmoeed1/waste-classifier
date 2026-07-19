@@ -5,12 +5,29 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class EnvironmentalImpact(BaseModel):
+    headline: str
+    co2_saved_per_kg: float | None = Field(
+        None, description="Approximate kg CO2e saved per kg recycled vs. virgin production"
+    )
+    energy_saved_pct: int | None = Field(
+        None, description="Approximate % energy saved vs. producing from raw material"
+    )
+    fact: str
+
+
 class PredictionResponse(BaseModel):
     label: str
     confidence: float = Field(..., description="Confidence of the top prediction, as a percentage")
     recyclable: bool
     probabilities: dict[str, float] = Field(
         ..., description="Predicted probability (%) for every class"
+    )
+    gradcam_image: str | None = Field(
+        None, description="Base64 PNG data URI: Grad-CAM heatmap showing where the model looked"
+    )
+    impact: EnvironmentalImpact | None = Field(
+        None, description="Approximate environmental impact of recycling this category"
     )
 
 
@@ -27,6 +44,10 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+
+
+class TranscriptionResponse(BaseModel):
+    text: str
 
 
 class HealthResponse(BaseModel):
