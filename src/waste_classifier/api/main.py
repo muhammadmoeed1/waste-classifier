@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import logging
 from contextlib import asynccontextmanager
@@ -16,6 +17,8 @@ from waste_classifier import config
 from waste_classifier.api.schemas import (
     ChatRequest,
     ChatResponse,
+    DetectionItem,
+    DetectResponse,
     EnvironmentalImpact,
     HealthResponse,
     PredictionResponse,
@@ -25,6 +28,7 @@ from waste_classifier.genai import assistant
 from waste_classifier.genai.groq_client import get_client
 from waste_classifier.ml import impact as impact_module
 from waste_classifier.ml.classifier import classifier
+from waste_classifier.ml.detect import detect_and_classify, draw_detections
 from waste_classifier.ml.explain import generate_gradcam
 from waste_classifier.rag.retriever import retriever
 
@@ -69,7 +73,9 @@ def health() -> HealthResponse:
 
 
 @app.post("/api/predict", response_model=PredictionResponse)
-async def predict(image: UploadFile = File(...)) -> PredictionResponse:
+async def predict(
+    image: UploadFile = File(...), include_gradcam: bool = True
+) -> PredictionResponse:
     if not classifier.is_ready:
         raise HTTPException(
             status_code=503,
@@ -84,11 +90,14 @@ async def predict(image: UploadFile = File(...)) -> PredictionResponse:
 
     result = classifier.predict(img)
 
+    # Grad-CAM adds a gradient pass; skip it for continuous live-camera capture
+    # (called every ~2s) where responsiveness matters more than the heatmap.
     gradcam_image = None
-    try:
-        gradcam_image = generate_gradcam(classifier.model, img, pred_index=result.label_index)
-    except Exception:
-        logger.exception("Grad-CAM generation failed; returning prediction without it")
+    if include_gradcam:
+        try:
+            gradcam_image = generate_gradcam(classifier.model, img, pred_index=result.label_index)
+        except Exception:
+            logger.exception("Grad-CAM generation failed; returning prediction without it")
 
     fact = impact_module.get_impact(result.label)
     impact_response = (
@@ -120,6 +129,41 @@ def chat(request: ChatRequest) -> ChatResponse:
     history = [m.model_dump() for m in request.history]
     answer = assistant.ask(request.question, request.classification_label, history)
     return ChatResponse(answer=answer)
+
+
+@app.post("/api/detect", response_model=DetectResponse)
+async def detect(image: UploadFile = File(...)) -> DetectResponse:
+    if not classifier.is_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
+        )
+
+    contents = await image.read()
+    try:
+        img = Image.open(io.BytesIO(contents))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.") from exc
+
+    detections = detect_and_classify(img, classifier)
+    annotated = draw_detections(img, detections)
+
+    buf = io.BytesIO()
+    annotated.save(buf, format="PNG")
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+
+    return DetectResponse(
+        detections=[
+            DetectionItem(
+                box=list(d.box),
+                label=d.label,
+                confidence=d.confidence,
+                recyclable=d.recyclable,
+            )
+            for d in detections
+        ],
+        annotated_image=f"data:image/png;base64,{encoded}",
+    )
 
 
 @app.post("/api/transcribe", response_model=TranscriptionResponse)

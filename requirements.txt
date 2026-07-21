@@ -4,6 +4,11 @@ numpy
 pillow
 scikit-learn
 matplotlib
+opencv-python
+
+# RAG (embeddings + vector search)
+sentence-transformers
+faiss-cpu
 
 # API / backend
 fastapi

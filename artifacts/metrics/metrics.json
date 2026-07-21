@@ -1,92 +1,92 @@
 {
-  "accuracy": 0.8198,
+  "accuracy": 0.8277,
   "num_validation_samples": 505,
   "per_class": {
     "cardboard": {
-      "precision": 0.9036,
-      "recall": 0.9036,
-      "f1": 0.9036,
+      "precision": 0.8506,
+      "recall": 0.8916,
+      "f1": 0.8706,
       "support": 83
     },
     "glass": {
-      "precision": 0.8444,
-      "recall": 0.7379,
-      "f1": 0.7876,
+      "precision": 0.7982,
+      "recall": 0.8447,
+      "f1": 0.8208,
       "support": 103
     },
     "metal": {
-      "precision": 0.8608,
-      "recall": 0.8718,
-      "f1": 0.8662,
+      "precision": 0.7374,
+      "recall": 0.9359,
+      "f1": 0.8249,
       "support": 78
     },
     "paper": {
-      "precision": 0.8966,
-      "recall": 0.8387,
-      "f1": 0.8667,
+      "precision": 0.9273,
+      "recall": 0.8226,
+      "f1": 0.8718,
       "support": 124
     },
     "plastic": {
-      "precision": 0.6818,
-      "recall": 0.8523,
-      "f1": 0.7576,
+      "precision": 0.8857,
+      "recall": 0.7045,
+      "f1": 0.7848,
       "support": 88
     },
     "trash": {
-      "precision": 0.5926,
-      "recall": 0.5517,
-      "f1": 0.5714,
+      "precision": 0.6667,
+      "recall": 0.6897,
+      "f1": 0.678,
       "support": 29
     }
   },
   "confusion_matrix": [
     [
-      75,
-      0,
-      0,
-      4,
+      74,
+      1,
       2,
+      4,
+      0,
       2
     ],
     [
       0,
-      76,
-      4,
+      87,
+      9,
       0,
-      23,
+      7,
       0
     ],
     [
       0,
-      7,
-      68,
-      1,
-      2,
+      5,
+      73,
+      0,
+      0,
       0
     ],
     [
-      7,
+      11,
       1,
       2,
-      104,
-      2,
+      102,
+      0,
       8
     ],
     [
-      1,
-      6,
       2,
-      3,
-      75,
-      1
+      15,
+      7,
+      2,
+      62,
+      0
     ],
     [
       0,
       0,
-      3,
-      4,
       6,
-      16
+      2,
+      1,
+      20
     ]
   ],
   "class_names": [

@@ -1,23 +1,26 @@
-"""TF-IDF based retriever over the recycling knowledge base.
+"""Embedding-based retriever over the recycling knowledge base.
 
-A lightweight, dependency-friendly retrieval approach: TF-IDF vectors +
-cosine similarity over a small, curated knowledge base. Deliberately avoids
-a heavy sentence-embedding model (e.g. sentence-transformers/torch) since the
-knowledge base is small and a full neural embedding model would add a large
-dependency/deploy cost for negligible quality gain at this scale. Swapping in
-a proper embedding model + vector DB (FAISS/Chroma) is a natural upgrade path
-if the knowledge base grows significantly.
+Each knowledge base chunk is embedded once (at startup) with a small sentence-
+transformer model, then indexed in a FAISS flat index for cosine-similarity
+search. This replaces an earlier TF-IDF/keyword implementation with genuine
+dense vector search: it matches paraphrased or loosely-worded questions
+("is it okay to toss a used bottle in with paper?") to the right knowledge
+chunk even when they share few exact words with the source text, which pure
+keyword matching cannot do.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
 
 from waste_classifier import config
 from waste_classifier.rag.knowledge_base import Chunk, load_knowledge_base
+
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 
 @dataclass
@@ -29,31 +32,38 @@ class RetrievedChunk:
 class KnowledgeRetriever:
     def __init__(self) -> None:
         self._chunks: list[Chunk] = []
-        self._vectorizer: TfidfVectorizer | None = None
-        self._matrix = None
+        self._model: SentenceTransformer | None = None
+        self._index: faiss.Index | None = None
 
     def build(self) -> None:
         self._chunks = load_knowledge_base()
         texts = [f"{c.heading}\n{c.text}" for c in self._chunks]
-        self._vectorizer = TfidfVectorizer(stop_words="english")
-        self._matrix = self._vectorizer.fit_transform(texts)
+
+        self._model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        embeddings = self._model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+        embeddings = np.asarray(embeddings, dtype=np.float32)
+
+        # Cosine similarity via inner product on L2-normalized vectors.
+        self._index = faiss.IndexFlatIP(embeddings.shape[1])
+        self._index.add(embeddings)
 
     @property
     def is_ready(self) -> bool:
-        return self._vectorizer is not None
+        return self._index is not None
 
     def retrieve(self, query: str, top_k: int = config.RAG_TOP_K) -> list[RetrievedChunk]:
         if not self.is_ready:
             raise RuntimeError("Retriever is not built. Call build() first.")
 
-        query_vec = self._vectorizer.transform([query])
-        scores = cosine_similarity(query_vec, self._matrix)[0]
-        ranked_idx = scores.argsort()[::-1][:top_k]
+        query_vec = self._model.encode([query], convert_to_numpy=True, normalize_embeddings=True)
+        query_vec = np.asarray(query_vec, dtype=np.float32)
+
+        scores, indices = self._index.search(query_vec, top_k)
 
         return [
-            RetrievedChunk(chunk=self._chunks[i], score=round(float(scores[i]), 4))
-            for i in ranked_idx
-            if scores[i] > 0
+            RetrievedChunk(chunk=self._chunks[idx], score=round(float(score), 4))
+            for score, idx in zip(scores[0], indices[0])
+            if idx >= 0 and score > 0
         ]
 
 

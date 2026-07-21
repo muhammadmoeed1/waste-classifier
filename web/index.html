@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart Waste Classifier</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1d9e75">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -16,61 +20,118 @@
     <p>Upload a photo to identify its waste category, then ask the AI assistant<br>anything about how to recycle it.</p>
   </div>
 
+  <!-- Mode switcher -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="upload"><i class="fas fa-image"></i> Upload Photo</button>
+    <button class="mode-tab" data-mode="camera"><i class="fas fa-video"></i> Live Camera</button>
+    <button class="mode-tab" data-mode="multi"><i class="fas fa-layer-group"></i> Multi-Item</button>
+  </div>
+
   <!-- Classification card -->
   <div class="card">
-    <div class="upload-zone" id="uploadZone">
-      <i class="fas fa-cloud-arrow-up"></i>
-      <div class="uz-title">Drop an image here</div>
-      <div class="uz-sub">or click to browse &mdash; JPG, PNG, WEBP</div>
-      <input type="file" id="fileInput" accept="image/*">
-    </div>
 
-    <div class="preview-wrap" id="previewWrap">
-      <img id="previewImg" alt="Selected image">
-    </div>
-    <p class="fname" id="fname">
-      <i class="fas fa-file-image"></i><span id="fnameText"></span>
-    </p>
-
-    <div class="btn-row">
-      <button type="button" class="btn" id="classifyBtn" disabled>
-        <i class="fas fa-magnifying-glass"></i> Classify waste
-      </button>
-      <button type="button" class="btn-clear" id="clearBtn">
-        <i class="fas fa-xmark"></i> Clear
-      </button>
-    </div>
-
-    <p class="error" id="errorMsg" style="display:none;"></p>
-
-    <div class="result-section" id="resultSection" style="display:none;">
-      <hr>
-      <div class="result-top">
-        <div class="result-label" id="resultLabel"></div>
-        <div class="badge" id="resultBadge"></div>
+    <!-- Upload mode -->
+    <div class="mode-panel" data-mode="upload">
+      <div class="upload-zone" id="uploadZone">
+        <i class="fas fa-cloud-arrow-up"></i>
+        <div class="uz-title">Drop an image here</div>
+        <div class="uz-sub">or click to browse &mdash; JPG, PNG, WEBP</div>
+        <input type="file" id="fileInput" accept="image/*" capture="environment">
       </div>
 
-      <div class="conf-row">
-        <span class="conf-label">Confidence</span>
-        <span class="conf-val" id="confVal"></span>
+      <div class="preview-wrap" id="previewWrap">
+        <img id="previewImg" alt="Selected image">
       </div>
-      <div class="bar-bg"><div class="bar-fill" id="confBar"></div></div>
+      <p class="fname" id="fname">
+        <i class="fas fa-file-image"></i><span id="fnameText"></span>
+      </p>
 
-      <div class="probs" id="probsList"></div>
-
-      <div class="gradcam-section" id="gradcamSection" style="display:none;">
-        <div class="section-label"><i class="fas fa-eye"></i> Where the model looked (Grad-CAM)</div>
-        <img id="gradcamImg" alt="Grad-CAM heatmap" class="gradcam-img">
-        <p class="gradcam-hint">Warmer colors (red/yellow) show the regions the AI focused on most to make this prediction.</p>
+      <div class="btn-row">
+        <button type="button" class="btn" id="classifyBtn" disabled>
+          <i class="fas fa-magnifying-glass"></i> Classify waste
+        </button>
+        <button type="button" class="btn-clear" id="clearBtn">
+          <i class="fas fa-xmark"></i> Clear
+        </button>
       </div>
 
-      <div class="impact-section" id="impactSection" style="display:none;">
-        <div class="section-label"><i class="fas fa-leaf"></i> Environmental impact</div>
-        <div class="impact-card">
-          <div class="impact-headline" id="impactHeadline"></div>
-          <div class="impact-stats" id="impactStats"></div>
-          <p class="impact-fact" id="impactFact"></p>
+      <p class="error" id="errorMsg" style="display:none;"></p>
+
+      <div class="result-section" id="resultSection" style="display:none;">
+        <hr>
+        <div class="result-top">
+          <div class="result-label" id="resultLabel"></div>
+          <div class="badge" id="resultBadge"></div>
         </div>
+
+        <div class="conf-row">
+          <span class="conf-label">Confidence</span>
+          <span class="conf-val" id="confVal"></span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill" id="confBar"></div></div>
+
+        <div class="probs" id="probsList"></div>
+
+        <div class="gradcam-section" id="gradcamSection" style="display:none;">
+          <div class="section-label"><i class="fas fa-eye"></i> Where the model looked (Grad-CAM)</div>
+          <img id="gradcamImg" alt="Grad-CAM heatmap" class="gradcam-img">
+          <p class="gradcam-hint">Warmer colors (red/yellow) show the regions the AI focused on most to make this prediction.</p>
+        </div>
+
+        <div class="impact-section" id="impactSection" style="display:none;">
+          <div class="section-label"><i class="fas fa-leaf"></i> Environmental impact</div>
+          <div class="impact-card">
+            <div class="impact-headline" id="impactHeadline"></div>
+            <div class="impact-stats" id="impactStats"></div>
+            <p class="impact-fact" id="impactFact"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live camera mode -->
+    <div class="mode-panel" data-mode="camera" style="display:none;">
+      <div class="camera-wrap">
+        <video id="cameraVideo" autoplay playsinline muted></video>
+        <canvas id="cameraCanvas" style="display:none;"></canvas>
+        <div class="camera-live-badge" id="cameraLiveBadge" style="display:none;">
+          <span id="cameraLiveLabel">-</span>
+          <span class="camera-live-conf" id="cameraLiveConf"></span>
+        </div>
+        <div class="camera-placeholder" id="cameraPlaceholder">
+          <i class="fas fa-video"></i>
+          <span>Camera is off</span>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn" id="cameraStartBtn"><i class="fas fa-video"></i> Start camera</button>
+        <button type="button" class="btn-clear" id="cameraStopBtn" style="display:none;"><i class="fas fa-stop"></i> Stop</button>
+      </div>
+      <p class="error" id="cameraErrorMsg" style="display:none;"></p>
+      <p class="gradcam-hint">Classifies automatically about every 2 seconds while the camera is on (heatmap/impact are skipped here for speed — use Upload Photo for the full analysis).</p>
+    </div>
+
+    <!-- Multi-item detection mode -->
+    <div class="mode-panel" data-mode="multi" style="display:none;">
+      <div class="upload-zone" id="multiUploadZone">
+        <i class="fas fa-cloud-arrow-up"></i>
+        <div class="uz-title">Drop a photo with multiple items</div>
+        <div class="uz-sub">e.g. several items laid out on a table &mdash; JPG, PNG, WEBP</div>
+        <input type="file" id="multiFileInput" accept="image/*" capture="environment">
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn" id="multiDetectBtn" disabled>
+          <i class="fas fa-layer-group"></i> Detect items
+        </button>
+        <button type="button" class="btn-clear" id="multiClearBtn">
+          <i class="fas fa-xmark"></i> Clear
+        </button>
+      </div>
+      <p class="error" id="multiErrorMsg" style="display:none;"></p>
+      <div class="multi-result" id="multiResultSection" style="display:none;">
+        <hr>
+        <img id="multiAnnotatedImg" class="gradcam-img" alt="Detected items">
+        <div class="multi-items-list" id="multiItemsList"></div>
       </div>
     </div>
   </div>

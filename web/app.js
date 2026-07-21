@@ -291,3 +291,177 @@ micBtn.addEventListener('click', () => {
     startRecording();
   }
 });
+
+// --- Mode tabs (Upload / Live Camera / Multi-Item) ---
+const modeTabs = document.querySelectorAll('.mode-tab');
+const modePanels = document.querySelectorAll('.mode-panel');
+
+modeTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const mode = tab.dataset.mode;
+    modeTabs.forEach((t) => t.classList.toggle('active', t === tab));
+    modePanels.forEach((p) => { p.style.display = p.dataset.mode === mode ? 'block' : 'none'; });
+    if (mode !== 'camera') stopCamera();
+  });
+});
+
+// --- Live camera mode ---
+const cameraVideo = document.getElementById('cameraVideo');
+const cameraCanvas = document.getElementById('cameraCanvas');
+const cameraStartBtn = document.getElementById('cameraStartBtn');
+const cameraStopBtn = document.getElementById('cameraStopBtn');
+const cameraLiveBadge = document.getElementById('cameraLiveBadge');
+const cameraLiveLabel = document.getElementById('cameraLiveLabel');
+const cameraLiveConf = document.getElementById('cameraLiveConf');
+const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+const cameraErrorMsg = document.getElementById('cameraErrorMsg');
+
+let cameraStream = null;
+let cameraLoopId = null;
+let cameraBusy = false;
+const CAMERA_INTERVAL_MS = 2000;
+
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+    });
+    cameraVideo.srcObject = cameraStream;
+    cameraPlaceholder.style.display = 'none';
+    cameraStartBtn.style.display = 'none';
+    cameraStopBtn.style.display = 'flex';
+    cameraErrorMsg.style.display = 'none';
+
+    cameraLoopId = setInterval(captureAndClassifyFrame, CAMERA_INTERVAL_MS);
+  } catch (err) {
+    cameraErrorMsg.textContent = 'Could not access your camera: ' + (err.message || err);
+    cameraErrorMsg.style.display = 'block';
+  }
+}
+
+function stopCamera() {
+  if (cameraLoopId) {
+    clearInterval(cameraLoopId);
+    cameraLoopId = null;
+  }
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
+  }
+  cameraVideo.srcObject = null;
+  cameraPlaceholder.style.display = 'flex';
+  cameraStartBtn.style.display = 'flex';
+  cameraStopBtn.style.display = 'none';
+  cameraLiveBadge.style.display = 'none';
+}
+
+async function captureAndClassifyFrame() {
+  if (cameraBusy || !cameraStream) return;
+  cameraBusy = true;
+
+  try {
+    cameraCanvas.width = cameraVideo.videoWidth;
+    cameraCanvas.height = cameraVideo.videoHeight;
+    const ctx = cameraCanvas.getContext('2d');
+    ctx.drawImage(cameraVideo, 0, 0);
+
+    const blob = await new Promise((resolve) => cameraCanvas.toBlob(resolve, 'image/jpeg', 0.85));
+    if (!blob) return;
+
+    const formData = new FormData();
+    formData.append('image', blob, 'frame.jpg');
+    const res = await fetch('/api/predict?include_gradcam=false', { method: 'POST', body: formData });
+    if (!res.ok) return;
+
+    const data = await res.json();
+    cameraLiveLabel.textContent = data.label;
+    cameraLiveConf.textContent = data.confidence + '%';
+    cameraLiveBadge.style.display = 'flex';
+  } catch (err) {
+    // Silently skip a failed frame — the next interval tick will retry.
+  } finally {
+    cameraBusy = false;
+  }
+}
+
+cameraStartBtn.addEventListener('click', startCamera);
+cameraStopBtn.addEventListener('click', stopCamera);
+window.addEventListener('beforeunload', stopCamera);
+
+// --- Multi-item detection mode ---
+const multiUploadZone = document.getElementById('multiUploadZone');
+const multiFileInput = document.getElementById('multiFileInput');
+const multiDetectBtn = document.getElementById('multiDetectBtn');
+const multiClearBtn = document.getElementById('multiClearBtn');
+const multiErrorMsg = document.getElementById('multiErrorMsg');
+const multiResultSection = document.getElementById('multiResultSection');
+const multiAnnotatedImg = document.getElementById('multiAnnotatedImg');
+const multiItemsList = document.getElementById('multiItemsList');
+
+multiFileInput.addEventListener('change', () => {
+  if (!multiFileInput.files[0]) return;
+  multiDetectBtn.disabled = false;
+  multiErrorMsg.style.display = 'none';
+  multiResultSection.style.display = 'none';
+});
+
+multiClearBtn.addEventListener('click', () => {
+  multiFileInput.value = '';
+  multiDetectBtn.disabled = true;
+  multiErrorMsg.style.display = 'none';
+  multiResultSection.style.display = 'none';
+});
+
+multiDetectBtn.addEventListener('click', async () => {
+  const file = multiFileInput.files[0];
+  if (!file) return;
+
+  multiDetectBtn.disabled = true;
+  multiDetectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Detecting...';
+  multiErrorMsg.style.display = 'none';
+
+  try {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch('/api/detect', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.detail || `Request failed (${res.status})`);
+    }
+    const data = await res.json();
+
+    multiAnnotatedImg.src = data.annotated_image;
+    multiItemsList.innerHTML = '';
+    if (data.detections.length === 0) {
+      multiItemsList.innerHTML = '<p class="gradcam-hint">No distinct items detected — try a photo with more contrast between items and background.</p>';
+    }
+    for (const det of data.detections) {
+      const row = document.createElement('div');
+      row.className = 'multi-item-row';
+      row.innerHTML = `
+        <span class="mi-label">${det.label}</span>
+        <span class="badge ${det.recyclable ? 'badge-rec' : 'badge-norec'}">
+          <i class="fas fa-${det.recyclable ? 'check' : 'xmark'}"></i> ${det.recyclable ? 'Recyclable' : 'Not recyclable'}
+        </span>
+        <span class="mi-conf">${det.confidence}%</span>
+      `;
+      multiItemsList.appendChild(row);
+    }
+    multiResultSection.style.display = 'block';
+  } catch (err) {
+    multiErrorMsg.textContent = err.message || 'Something went wrong.';
+    multiErrorMsg.style.display = 'block';
+  } finally {
+    multiDetectBtn.disabled = false;
+    multiDetectBtn.innerHTML = '<i class="fas fa-layer-group"></i> Detect items';
+  }
+});
+
+// --- PWA: register service worker ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Non-fatal — the app works fine without offline support.
+    });
+  });
+}

@@ -57,6 +57,41 @@ def test_predict_with_valid_image_or_503_if_model_missing(client):
         assert "fact" in body["impact"]
 
 
+def test_predict_skips_gradcam_when_include_gradcam_false(client):
+    img = Image.new("RGB", (224, 224), color=(80, 160, 80))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    res = client.post(
+        "/api/predict?include_gradcam=false",
+        files={"image": ("test.png", buf, "image/png")},
+    )
+    assert res.status_code in (200, 503)
+    if res.status_code == 200:
+        assert res.json()["gradcam_image"] is None
+
+
+def test_detect_with_valid_image_or_503_if_model_missing(client):
+    img = Image.new("RGB", (224, 224), color=(80, 160, 80))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    res = client.post(
+        "/api/detect",
+        files={"image": ("test.png", buf, "image/png")},
+    )
+    assert res.status_code in (200, 503)
+    if res.status_code == 200:
+        body = res.json()
+        assert "detections" in body
+        assert body["annotated_image"].startswith("data:image/png;base64,")
+        for det in body["detections"]:
+            assert len(det["box"]) == 4
+            assert "label" in det
+
+
 def test_transcribe_without_groq_key_returns_503(client, monkeypatch):
     from waste_classifier import config
 

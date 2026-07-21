@@ -50,6 +50,18 @@ class TranscriptionResponse(BaseModel):
     text: str
 
 
+class DetectionItem(BaseModel):
+    box: list[int] = Field(..., description="[x, y, width, height] in original image pixels")
+    label: str
+    confidence: float
+    recyclable: bool
+
+
+class DetectResponse(BaseModel):
+    detections: list[DetectionItem]
+    annotated_image: str = Field(..., description="Base64 PNG data URI with drawn bounding boxes")
+
+
 class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
