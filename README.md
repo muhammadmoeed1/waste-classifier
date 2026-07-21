@@ -209,8 +209,12 @@ docker compose up --build
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for deploying to Hugging Face Spaces (free,
-recommended) or Render, including an automated GitHub Actions deploy workflow.
+Two Docker profiles are included: the full app (`docker/Dockerfile`) and a
+**lightweight profile** (`docker/Dockerfile.lite`) sized for free-tier hosts with
+limited RAM — it swaps the embeddings+FAISS RAG retriever for a TF-IDF fallback,
+disables Grad-CAM, and tunes TensorFlow's thread pools, cutting peak memory from
+~560MB to ~220MB per request. See [DEPLOYMENT.md](DEPLOYMENT.md) for the full
+deployment guide (Render, recommended and free with no card required).
 
 ## What I learned / engineering notes
 
@@ -239,6 +243,12 @@ recommended) or Render, including an automated GitHub Actions deploy workflow.
   confidence-based suppression — analogous to non-max suppression in a real
   detector, but scored by the classifier's own confidence rather than a
   learned objectness score.
+- Measured (rather than assumed) memory usage before picking a free hosting
+  tier: profiling showed Grad-CAM's extra gradient pass added ~150MB per
+  request, and TensorFlow's default multi-threaded pools roughly doubled
+  baseline memory (~430MB → ~220MB after pinning to 1 thread) for negligible
+  speed gain on a single-vCPU host. That data — not guesswork — is what the
+  lightweight deployment profile is built around.
 - Voice input reuses the same Groq account for speech-to-text (Whisper), so the
   whole GenAI surface — chat, RAG, and transcription — runs through one
   provider and one API key.

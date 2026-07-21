@@ -30,7 +30,7 @@ from waste_classifier.ml import impact as impact_module
 from waste_classifier.ml.classifier import classifier
 from waste_classifier.ml.detect import detect_and_classify, draw_detections
 from waste_classifier.ml.explain import generate_gradcam
-from waste_classifier.rag.retriever import retriever
+from waste_classifier.rag import retriever
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -91,9 +91,11 @@ async def predict(
     result = classifier.predict(img)
 
     # Grad-CAM adds a gradient pass; skip it for continuous live-camera capture
-    # (called every ~2s) where responsiveness matters more than the heatmap.
+    # (called every ~2s) where responsiveness matters more than the heatmap, and
+    # skip it unconditionally on the lightweight deployment profile where the
+    # extra memory would risk exceeding the host's RAM limit.
     gradcam_image = None
-    if include_gradcam:
+    if include_gradcam and not config.DISABLE_GRADCAM:
         try:
             gradcam_image = generate_gradcam(classifier.model, img, pred_index=result.label_index)
         except Exception:

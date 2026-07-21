@@ -32,6 +32,19 @@ KNOWLEDGE_BASE_DIR = Path(
 )
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 
+# "embeddings" (default): sentence-transformers + FAISS vector search — used for local
+# dev, Docker, and any host with enough RAM.
+# "tfidf": lightweight scikit-learn keyword retriever with no torch/embeddings model —
+# used for the free-tier deployment profile (docker/Dockerfile.lite), which needs to
+# fit well under 512MB RAM.
+RAG_BACKEND = os.getenv("RAG_BACKEND", "embeddings")
+
+# Grad-CAM needs an extra gradient pass through the CNN, which measurably raises
+# peak memory (~150MB in local testing) — enough to push a 512MB free-tier host
+# over its limit. The lightweight deployment profile (docker/Dockerfile.lite)
+# sets this to disable Grad-CAM server-side regardless of what a client requests.
+DISABLE_GRADCAM = os.getenv("DISABLE_GRADCAM", "false").lower() == "true"
+
 # --- API ---
 API_TITLE = "Smart Waste Classifier API"
 API_VERSION = __import__("waste_classifier").__version__

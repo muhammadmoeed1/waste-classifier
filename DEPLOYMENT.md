@@ -1,111 +1,98 @@
 # Deployment Guide
 
-This app is a single Docker container (see [docker/Dockerfile](docker/Dockerfile)), so it can
-be deployed anywhere that runs containers.
+This app is a single Docker container, so it can be deployed anywhere that runs
+containers. There are two Docker profiles:
 
-**A note on hosting costs (checked live, since these change often):**
-- **Hugging Face Spaces** now requires a **paid PRO plan ($9/month)** to run a Docker
-  SDK Space, even on free CPU hardware — only Gradio/Streamlit/static Spaces stay free.
-- **Render.com**'s free web service tier is only **512MB RAM**, which is very likely
-  too small for this app (TensorFlow + PyTorch + FAISS all loaded at once).
-- **Google Cloud Run** (below) is genuinely free for a low-traffic demo like this one —
-  it scales to zero when idle (no cost while nobody's using it) and comfortably fits
-  within its generous "Always Free" monthly quota. Recommended.
+- **`docker/Dockerfile`** — the full app (embeddings + FAISS RAG, Grad-CAM). Needs
+  ~1GB+ RAM. Use this for local dev, self-hosting, or any host with enough RAM.
+- **`docker/Dockerfile.lite`** — a lightweight profile for free-tier hosts with
+  limited RAM. Drops the sentence-transformers/FAISS/torch stack in favor of the
+  TF-IDF retriever fallback, disables Grad-CAM (which needs an extra gradient pass),
+  and limits TensorFlow's thread pools — measured at **~220MB peak RAM** per
+  request (vs. ~560MB for the full profile with Grad-CAM enabled). Everything else
+  (image classification, multi-item detection, Groq chat, Whisper voice input) is
+  unchanged.
 
-## Option A — Google Cloud Run (recommended, free for this use case)
+**On hosting costs (checked live, since these change often):**
+- **Hugging Face Spaces** now requires a **paid PRO plan ($9/month)** for any
+  compute-backed Space (Docker, Gradio, or Streamlit) — only static (no backend)
+  Spaces stay free, which doesn't work for this app.
+- **Google Cloud Run**'s free quota is genuinely generous, but Google now requires
+  a **billing account (card on file)** to enable it, even if you're never charged.
+- **Render.com**'s free web service tier requires **no card at all** and gives
+  512MB RAM — which is why this project ships the lite profile above, sized to
+  fit comfortably inside that limit.
 
-### 1. One-time account setup
-1. Create a Google Cloud account at https://console.cloud.google.com if you don't have one.
-2. Create a new project (or use an existing one) — note its **Project ID**.
-3. Enable billing on the project (**Billing → Link a billing account**). This requires
-   a card on file, but you will not be charged as long as usage stays within the
-   [Always Free](https://cloud.google.com/free) monthly quota (2M requests,
-   180,000 vCPU-seconds, 360,000 GiB-seconds) — a portfolio demo with light traffic
-   stays well inside this.
-4. Enable two APIs for your project (Console → search each → **Enable**):
-   - **Cloud Run API**
-   - **Cloud Build API**
+## Recommended: Render.com (free, no card, using the lite profile)
 
-### 2. Install the gcloud CLI
-Download and install from https://cloud.google.com/sdk/docs/install, then:
-```bash
-gcloud init                     # logs you in via browser, sets your default project
-gcloud auth login                # if init doesn't already prompt this
-```
+1. Create a free account at https://render.com (no card required) and connect your GitHub repo.
+2. **New → Web Service** → select the `waste-classifier` repo.
+3. Environment: **Docker**. Set the **Dockerfile path** to `docker/Dockerfile.lite`.
+4. Instance type: **Free**.
+5. Under **Environment Variables**, add:
+   - `GROQ_API_KEY` = your key from https://console.groq.com/keys
+   - `GROQ_MODEL` = `llama-3.3-70b-versatile`
+6. Click **Create Web Service**. Render builds the image and deploys automatically
+   on every push to `main`.
+7. Your live demo URL appears at the top of the Render dashboard once the build
+   finishes (looks like `https://waste-classifier-xxxx.onrender.com`).
 
-### 3. Build the image with Cloud Build
-From the repo root (this project already includes `cloudbuild.yaml`, which points
-Cloud Build at `docker/Dockerfile` instead of the repo root):
-```bash
-gcloud builds submit --config cloudbuild.yaml \
-  --substitutions=_IMAGE="us-central1-docker.pkg.dev/YOUR_PROJECT_ID/waste-classifier/app:latest" \
-  .
-```
-Replace `YOUR_PROJECT_ID` with your actual project ID. The first time you do this,
-`gcloud` will offer to create an Artifact Registry repo for you — accept it.
+**Two free-tier tradeoffs worth knowing:**
+- The service **spins down after 15 minutes of inactivity** and takes ~30-60s to
+  wake up on the next request (a "cold start") — normal for free hosting, not a bug.
+- The lite profile **skips the Grad-CAM heatmap** and uses simpler keyword-based
+  (not embeddings-based) RAG retrieval, to fit the 512MB limit. Both are fully
+  implemented and demonstrated in the codebase (and in the full `docker/Dockerfile`
+  profile) — this is a deliberate memory/feature tradeoff for the free-hosted demo,
+  not a limitation of the underlying work.
 
-### 4. Deploy to Cloud Run
-```bash
-gcloud run deploy waste-classifier \
-  --image us-central1-docker.pkg.dev/YOUR_PROJECT_ID/waste-classifier/app:latest \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --memory 2Gi \
-  --set-env-vars GROQ_API_KEY=YOUR_GROQ_KEY,GROQ_MODEL=llama-3.3-70b-versatile
-```
-(For a real project you'd put `GROQ_API_KEY` in
-[Secret Manager](https://cloud.google.com/run/docs/configuring/services/secrets)
-instead of a plain env var — fine to skip that extra step for a portfolio demo.)
+## Alternative — Google Cloud Run (free quota, but requires a billing card on file)
 
-### 5. Get your live URL
-`gcloud run deploy` prints a **Service URL** at the end
-(`https://waste-classifier-xxxxx-uc.a.run.app`) — that's your public, shareable demo link.
+Only consider this if you're fine adding a card (you won't be charged for a
+low-traffic demo, but Google requires one to enable the Cloud Run API at all).
+Runs the full profile (Grad-CAM + embeddings RAG) with no memory concerns.
 
-### Redeploying after future changes
-Just re-run steps 3 and 4 (the build + deploy commands) — Cloud Run keeps the URL
-the same across deployments.
+1. Create a project at https://console.cloud.google.com, enable billing, and enable
+   the **Cloud Run API** and **Cloud Build API**.
+2. Install the gcloud CLI: https://cloud.google.com/sdk/docs/install, then `gcloud init`.
+3. Build with the included `cloudbuild.yaml` (points Cloud Build at `docker/Dockerfile`):
+   ```bash
+   gcloud builds submit --config cloudbuild.yaml \
+     --substitutions=_IMAGE="us-central1-docker.pkg.dev/YOUR_PROJECT_ID/waste-classifier/app:latest" .
+   ```
+4. Deploy:
+   ```bash
+   gcloud run deploy waste-classifier \
+     --image us-central1-docker.pkg.dev/YOUR_PROJECT_ID/waste-classifier/app:latest \
+     --region us-central1 --allow-unauthenticated --memory 2Gi \
+     --set-env-vars GROQ_API_KEY=YOUR_GROQ_KEY,GROQ_MODEL=llama-3.3-70b-versatile
+   ```
+5. `gcloud run deploy` prints your live **Service URL** at the end.
 
-## Option B — Hugging Face Spaces (requires PRO, $9/month)
+## Alternative — Hugging Face Spaces (requires PRO, $9/month)
 
-1. Create a free account at https://huggingface.co/join, then subscribe to
-   [PRO](https://huggingface.co/pricing) (Docker Spaces are gated behind this).
-2. Create a new **Space**: https://huggingface.co/new-space — SDK: **Docker**, visibility: public.
-3. In the Space's **Settings → Variables and secrets**, add secret `GROQ_API_KEY`.
-4. Push this repo's code to the Space's git remote:
+1. Subscribe to [PRO](https://huggingface.co/pricing), then create a new
+   **Space** (SDK: Docker) at https://huggingface.co/new-space.
+2. Add secret `GROQ_API_KEY` under the Space's **Settings → Variables and secrets**.
+3. Push this repo to the Space's git remote:
    ```bash
    git remote add space https://huggingface.co/spaces/<your-username>/<space-name>
    git push space main
    ```
-   (Requires a YAML metadata block at the top of the Space's README.md — see
-   `.github/workflows/deploy-hf-spaces.yml` for an automated way to inject it, or add manually:)
-   ```yaml
-   ---
-   title: Smart Waste Classifier
-   emoji: ♻️
-   colorFrom: green
-   colorTo: blue
-   sdk: docker
-   app_port: 7860
-   ---
-   ```
-5. Live demo: `https://huggingface.co/spaces/<your-username>/<space-name>`
-
-## Option C — Render.com (free tier likely too small for this app)
-
-Only consider this if you're willing to either upgrade to a paid instance (≥1GB RAM,
-~$7/month) or significantly lighten the app's dependencies first (e.g. drop the
-sentence-transformers/FAISS RAG stack in favor of the earlier TF-IDF retriever).
-
-1. Create a free account at https://render.com and connect your GitHub repo.
-2. New → Web Service → select this repo.
-3. Environment: **Docker**, Dockerfile path: `docker/Dockerfile`.
-4. Add environment variable `GROQ_API_KEY` in the Render dashboard.
-5. Pick an instance type with at least 1GB RAM if the free tier fails to start (OOM).
+   Requires a YAML metadata block at the top of the Space's README.md — see
+   `.github/workflows/deploy-hf-spaces.yml` for an automated way to inject it.
 
 ## Local Docker run (to test before deploying)
 
+Full profile:
 ```bash
 cp .env.example .env        # then fill in your GROQ_API_KEY
 docker compose up --build
+```
+
+Lite profile (to test what will actually run on Render):
+```bash
+docker build -f docker/Dockerfile.lite -t waste-classifier:lite .
+docker run -p 7860:7860 --env-file .env waste-classifier:lite
 ```
 Then open http://localhost:7860

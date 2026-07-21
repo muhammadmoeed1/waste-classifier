@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 from waste_classifier import config
 from waste_classifier.genai.groq_client import get_client
-from waste_classifier.rag.retriever import retriever
+from waste_classifier.rag import retriever
 
 SYSTEM_PROMPT = """\
 You are a helpful, concise recycling assistant embedded in a waste-classification app.

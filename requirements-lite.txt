@@ -1,0 +1,28 @@
+# Lightweight deployment profile — used by docker/Dockerfile.lite for free-tier
+# hosts with limited RAM (e.g. Render's free 512MB web service).
+#
+# Excludes sentence-transformers / faiss-cpu (and the torch they pull in —
+# combined, well over 1GB) which the full requirements.txt installs for the
+# embeddings-based RAG retriever. This profile instead uses the TF-IDF
+# retriever fallback (set RAG_BACKEND=tfidf) — see
+# src/waste_classifier/rag/lightweight_retriever.py.
+#
+# matplotlib is also excluded: it's only used by ml/evaluate.py (an offline
+# training-time script), never imported by the running API.
+
+# Core ML
+tensorflow>=2.16
+numpy
+pillow
+scikit-learn
+opencv-python
+
+# API / backend
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+python-dotenv
+
+# GenAI
+groq

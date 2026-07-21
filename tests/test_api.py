@@ -72,6 +72,27 @@ def test_predict_skips_gradcam_when_include_gradcam_false(client):
         assert res.json()["gradcam_image"] is None
 
 
+def test_predict_respects_disable_gradcam_config_override(client, monkeypatch):
+    from waste_classifier import config
+
+    monkeypatch.setattr(config, "DISABLE_GRADCAM", True)
+
+    img = Image.new("RGB", (224, 224), color=(80, 160, 80))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    # include_gradcam=true is requested, but the server-side lite-deployment
+    # flag must win to keep memory usage bounded.
+    res = client.post(
+        "/api/predict?include_gradcam=true",
+        files={"image": ("test.png", buf, "image/png")},
+    )
+    assert res.status_code in (200, 503)
+    if res.status_code == 200:
+        assert res.json()["gradcam_image"] is None
+
+
 def test_detect_with_valid_image_or_503_if_model_missing(client):
     img = Image.new("RGB", (224, 224), color=(80, 160, 80))
     buf = io.BytesIO()

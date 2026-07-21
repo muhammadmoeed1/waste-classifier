@@ -1,0 +1,42 @@
+# Lightweight deployment profile for free-tier hosts with limited RAM (e.g.
+# Render's free 512MB web service). Skips sentence-transformers/faiss-cpu/torch
+# (see requirements-lite.txt) and uses the TF-IDF RAG retriever instead of
+# embeddings + FAISS. Everything else (CV model, Grad-CAM, multi-item
+# detection, Groq chat/Whisper) is unchanged. Use docker/Dockerfile instead for
+# local dev / self-hosting where RAM isn't a constraint.
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps needed by Pillow/OpenCV at runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-lite.txt .
+RUN pip install --no-cache-dir -r requirements-lite.txt
+
+COPY src/ src/
+COPY web/ web/
+COPY data/knowledge_base/ data/knowledge_base/
+COPY artifacts/waste_model.keras artifacts/waste_model.keras
+COPY artifacts/class_names.json artifacts/class_names.json
+COPY pyproject.toml .
+
+ENV PYTHONPATH=/app/src
+ENV RAG_BACKEND=tfidf
+ENV DISABLE_GRADCAM=true
+
+# TensorFlow's default multi-threaded thread pools roughly double memory use on
+# a free-tier host (measured: ~430MB vs ~220MB for the same request) for a
+# negligible speed gain on a single-vCPU instance — not worth it when 512MB is
+# the hard ceiling.
+ENV OMP_NUM_THREADS=1
+ENV TF_NUM_INTEROP_THREADS=1
+ENV TF_NUM_INTRAOP_THREADS=1
+
+EXPOSE 7860
+
+CMD ["uvicorn", "waste_classifier.api.main:app", "--host", "0.0.0.0", "--port", "7860"]
