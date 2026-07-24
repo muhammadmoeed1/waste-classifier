@@ -30,7 +30,10 @@ def _build_context_block(question: str) -> str:
 
 
 def _build_messages(
-    question: str, classification_label: str | None, history: list[dict] | None
+    question: str,
+    classification_label: str | None,
+    history: list[dict] | None,
+    language: str = "en",
 ) -> list[dict]:
     context = _build_context_block(question)
 
@@ -40,8 +43,15 @@ def _build_messages(
         if classification_label
         else ""
     )
+    language_note = (
+        "\n\nRespond in Urdu (اردو), regardless of what language the knowledge base "
+        "context above is written in."
+        if language == "ur"
+        else ""
+    )
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT + classification_note + context_note}]
+    system_content = SYSTEM_PROMPT + classification_note + context_note + language_note
+    messages = [{"role": "system", "content": system_content}]
     if history:
         messages.extend(history)
     messages.append({"role": "user", "content": question})
@@ -52,12 +62,13 @@ def ask(
     question: str,
     classification_label: str | None = None,
     history: list[dict] | None = None,
+    language: str = "en",
 ) -> str:
     """Non-streaming chat completion (used by tests and simple clients)."""
     client = get_client()
     response = client.chat.completions.create(
         model=config.GROQ_MODEL,
-        messages=_build_messages(question, classification_label, history),
+        messages=_build_messages(question, classification_label, history, language),
         temperature=0.4,
     )
     return response.choices[0].message.content
@@ -67,12 +78,13 @@ def ask_stream(
     question: str,
     classification_label: str | None = None,
     history: list[dict] | None = None,
+    language: str = "en",
 ) -> Iterator[str]:
     """Streaming chat completion — yields text chunks as they arrive from Groq."""
     client = get_client()
     stream = client.chat.completions.create(
         model=config.GROQ_MODEL,
-        messages=_build_messages(question, classification_label, history),
+        messages=_build_messages(question, classification_label, history, language),
         temperature=0.4,
         stream=True,
     )

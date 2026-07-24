@@ -1,4 +1,4 @@
-const CACHE_NAME = 'waste-classifier-v1';
+const CACHE_NAME = 'waste-classifier-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -26,22 +26,24 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Cache-first for the static app shell; network-only (never cached) for API calls,
+// Network-first for the app shell, falling back to cache only when offline —
+// this way every deploy is picked up immediately instead of being masked by a
+// stale cached copy of index.html/app.js/style.css. Never touch API calls,
 // since predictions/chat/transcription must always hit the live backend.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/api/')) return;
+  if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok && event.request.method === 'GET') {
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });

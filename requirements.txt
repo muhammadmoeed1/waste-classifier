@@ -10,6 +10,13 @@ opencv-python
 sentence-transformers
 faiss-cpu
 
+# Multi-item object detection (pretrained YOLOv8n)
+ultralytics
+
+# Model optimization (export/benchmark; see ml/export_onnx.py)
+tf2onnx
+onnxruntime
+
 # API / backend
 fastapi
 uvicorn[standard]

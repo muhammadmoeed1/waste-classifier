@@ -17,6 +17,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # huggingface.co is restricted in the deploy environment).
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
+# Same reasoning for the pretrained YOLOv8n weights used by multi-item detection
+# (downloads to the working directory, /app, which detect.py's YOLO("yolov8n.pt")
+# resolves relative to at runtime).
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+
 COPY src/ src/
 COPY web/ web/
 COPY data/knowledge_base/ data/knowledge_base/

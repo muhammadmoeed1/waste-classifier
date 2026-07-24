@@ -35,7 +35,12 @@ ask a RAG-grounded chatbot follow-up questions about how to recycle it.
    like *"can I recycle this if it's dirty?"* — by **typing or by voice**
    (speech is transcribed with Groq Whisper) — and get a grounded, streamed
    answer.
-6. **Installable as an app** — the frontend is a Progressive Web App (manifest +
+6. Flip on **🤖 Agent mode** and the assistant becomes a genuine **tool-calling
+   AI agent**: instead of answering from text alone, it autonomously decides to
+   call real functions — look up a material's recycling guide, calculate CO₂
+   saved for a given weight, check recyclability — and you can see exactly
+   which tools it used for each answer.
+7. **Installable as an app** — the frontend is a Progressive Web App (manifest +
    service worker), so it can be added to a phone's home screen and used like
    a native app.
 
@@ -45,7 +50,7 @@ ask a RAG-grounded chatbot follow-up questions about how to recycle it.
 flowchart TD
     U[Upload photo] --> API[FastAPI backend]
     C[Live camera frame] --> API
-    M[Multi-item photo] --> DET[OpenCV region detection<br/>+ per-region classification]
+    M[Multi-item photo] --> DET[YOLOv8n localization<br/>+ OpenCV contours, unioned]
     DET --> API
 
     API --> CV[MobileNetV2 classifier<br/>fine-tuned, TensorFlow/Keras]
@@ -58,10 +63,16 @@ flowchart TD
     V[User speaks a question] --> WSP[Groq Whisper<br/>transcription]
     WSP --> Q[Question text]
     Q --> API
-    API --> RAG[Sentence embeddings<br/>+ FAISS vector search]
+
+    Q --> RAGPATH{Agent mode?}
+    RAGPATH -->|off: plain RAG| RAG[Sentence embeddings<br/>+ FAISS vector search]
     RAG --> LLM[Groq LLM<br/>Llama 3.3 70B]
-    LLM -->|streamed response| API
-    API -->|SSE stream| UI
+    RAGPATH -->|on: agent| AGENT[Groq tool-calling agent]
+    AGENT -->|calls as needed| TOOLS[recycling guide lookup /<br/>CO2 estimator / recyclability check]
+    TOOLS --> AGENT
+    AGENT --> LLM
+    LLM -->|streamed or tool trace| API
+    API -->|SSE stream / JSON| UI
 ```
 
 ## Tech stack
@@ -69,16 +80,18 @@ flowchart TD
 | Layer               | Technology                                                        |
 |---------------------|--------------------------------------------------------------------|
 | Computer vision     | TensorFlow / Keras, MobileNetV2 transfer learning + fine-tuning, class-weighted + best-epoch training |
+| Model optimization   | ONNX Runtime export + dynamic int8 quantization, benchmarked against the Keras baseline |
 | Explainable AI       | Grad-CAM (gradient-based class activation mapping), implemented from scratch with `tf.GradientTape` |
-| Multi-item detection | OpenCV contour/edge-based region proposals + confidence-based suppression, each region classified by the same CNN |
+| Multi-item detection | Pretrained YOLOv8n (ultralytics) + OpenCV contour proposals, unioned and resolved via confidence-based suppression |
 | Backend API         | FastAPI, Pydantic, Uvicorn                                          |
-| Generative AI       | Groq API (Llama 3.3 70B) — streaming chat completions + Whisper speech-to-text |
+| Generative AI       | Groq API (Llama 3.3 70B) — streaming chat, **tool-calling agent**, + Whisper speech-to-text |
 | Retrieval (RAG)     | Sentence-transformer embeddings (`all-MiniLM-L6-v2`) + FAISS vector search over a markdown knowledge base |
 | Frontend            | Vanilla HTML/CSS/JS, live camera (MediaRecorder/getUserMedia), server-sent streaming chat |
 | PWA                  | Web app manifest + service worker — installable, offline-capable app shell |
+| i18n                 | English / Urdu UI with RTL layout, bilingual AI assistant           |
 | Testing             | Pytest, FastAPI TestClient                                           |
 | Quality             | Ruff (lint)                                                          |
-| Packaging / deploy  | Docker, Docker Compose, GitHub Actions CI/CD, Hugging Face Spaces    |
+| Packaging / deploy  | Docker (full + memory-optimized lite profile), GitHub Actions CI/CD |
 
 ## Explainable AI: Grad-CAM
 
@@ -91,14 +104,64 @@ background artifacts or dataset bias:
 
 *(Example: classified as "plastic" at 99.8% confidence — the heatmap shows the model focusing on the bottle body and label, not the background.)*
 
+## Agentic AI: tool-calling assistant
+
+Flip on **🤖 Agent mode** in the chat and the assistant stops answering from
+text alone — it's given a set of real tools (`src/waste_classifier/genai/tools.py`)
+and autonomously decides which to call, with what arguments, before responding:
+
+- `lookup_recycling_guide(material)` — pulls the curated knowledge-base entry
+- `estimate_environmental_impact(material, weight_kg)` — computes real CO₂ savings
+- `check_recyclability(material)` — quick true/false lookup
+
+Example (real output, not scripted): asked *"How much CO2 do I save recycling
+2kg of aluminum cans? Also, can I recycle a greasy pizza box?"*, the agent
+independently called **both** `estimate_environmental_impact` (material=metal,
+weight_kg=2 → 18kg CO2 saved) and `lookup_recycling_guide` (material=paper),
+then combined both results into one answer — a genuine multi-step agent loop
+(`src/waste_classifier/genai/agent.py`), not a single scripted RAG lookup. The
+UI shows a small trace of which tools were used for each answer.
+
 ## Multi-item detection
 
-The **Multi-Item** mode localizes several objects in one photo (OpenCV contour
-detection) and classifies each region independently:
+The **Multi-Item** mode localizes several objects in one photo and classifies
+each region independently. Localization unions two complementary sources: a
+**pretrained YOLOv8n** (real object detector, trained on COCO — used only for
+"where is an object", its COCO class label is discarded) plus OpenCV contour
+detection. Neither alone is sufficient: YOLO's learned priors catch upright,
+COCO-familiar shapes (bottles, books) that classical CV misses amid background
+clutter, but has no COCO class for e.g. a can lying on its side, which
+classical CV catches fine from contrast alone.
 
 ![Multi-item detection example](artifacts/metrics/multi_item_sample.png)
 
 *(Example: three items in one composite photo, each correctly localized and classified.)*
+
+## Model optimization: ONNX + quantization
+
+`python -m waste_classifier.ml.export_onnx` exports the trained Keras model to
+ONNX, quantizes it to int8, and benchmarks all three serving paths on the same
+CPU (30 runs each, single-image latency):
+
+| Format              | Latency  | Speedup vs. Keras | Size    |
+|---------------------|----------|--------------------|---------|
+| Keras (baseline)     | 326.9 ms | 1.0x               | 27.1 MB |
+| ONNX (fp32)          | 25.6 ms  | **12.75x**         | 8.9 MB  |
+| ONNX (int8, quantized) | 120.7 ms | 2.71x            | 2.4 MB  |
+
+Full numbers: [`artifacts/metrics/onnx_benchmark.json`](artifacts/metrics/onnx_benchmark.json).
+
+Note the quantized model is *slower* than plain fp32 ONNX here despite being
+smaller — a real, honest result: this CPU has no AVX512-VNNI acceleration for
+int8 ops, so dynamic quantization adds dequantization overhead without a
+matching speed win. Its **91% size reduction** is still valuable for
+bandwidth/storage-constrained edge deployment, just not for raw CPU latency on
+this hardware — the right format depends on what you're actually optimizing
+for. `src/waste_classifier/ml/onnx_classifier.py` provides a drop-in
+`OnnxWasteClassifier` with the same interface as the Keras classifier for
+anyone who wants the ONNX path in production (not wired in as the default,
+since Grad-CAM needs real gradient-tape access that ONNX Runtime's
+inference-only graph doesn't expose).
 
 ## Model performance
 
@@ -236,13 +299,28 @@ deployment guide (Render, recommended and free with no card required).
 - Implemented Grad-CAM from scratch with `tf.GradientTape` (rather than pulling
   in a black-box explainability library) to directly control which layer is
   visualized and how it plugs into the existing Keras `Sequential` model.
-- Multi-item detection deliberately uses classical CV (OpenCV contour/edge
-  detection) rather than training a deep object detector like YOLO, since
-  TrashNet has no bounding-box labels to train one on. Candidate regions are
-  found liberally (including overlapping/nested ones) and then reduced with
-  confidence-based suppression — analogous to non-max suppression in a real
-  detector, but scored by the classifier's own confidence rather than a
-  learned objectness score.
+- Multi-item detection combines a pretrained YOLOv8n with classical CV rather
+  than picking one — an early test on a 3-item composite photo showed YOLO
+  alone found only 1/3 items (COCO has no "can lying on its side" class),
+  while classical CV alone found all 3 but has no learned object priors for
+  cluttered real photos. Unioning both candidate sets before the existing
+  confidence-based suppression step gets the coverage of both without
+  training a detector from scratch, which TrashNet's lack of bounding-box
+  labels rules out anyway.
+- Chose to give the recycling assistant real tool-calling (Groq function
+  calling) as an opt-in "Agent mode" alongside the existing RAG-only mode,
+  rather than replacing it — RAG-only is faster for simple questions, while
+  the agent loop is worth the extra round-trips for compound/quantitative
+  questions (e.g. "how much CO2 for 2kg of X") that need actual computation
+  rather than retrieved text.
+- Exporting to ONNX surfaced a real Keras 3 compatibility gap: tf2onnx's
+  `from_keras()` fails on Keras 3's internal tensor naming, and even
+  `from_saved_model()` failed separately because the training-only
+  augmentation layers' internal SeedGenerator state isn't reachable from a
+  custom serving signature. Fixed by exporting a rebuilt inference-only
+  model (same trained layer objects, augmentation excluded) via
+  `tf2onnx.convert.from_function()` directly — no manual weight copying
+  needed since the layer objects themselves carry their trained weights.
 - Measured (rather than assumed) memory usage before picking a free hosting
   tier: profiling showed Grad-CAM's extra gradient pass added ~150MB per
   request, and TensorFlow's default multi-threaded pools roughly doubled

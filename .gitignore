@@ -15,6 +15,10 @@ data/dataset/
 # Large training history not needed for the repo
 artifacts/metrics/training_history.json
 
+# Pretrained YOLOv8n weights (auto-downloaded by ultralytics on first use;
+# re-fetchable from https://github.com/ultralytics/assets, not our own artifact)
+yolov8n.pt
+
 # OS
 .DS_Store
 Thumbs.db

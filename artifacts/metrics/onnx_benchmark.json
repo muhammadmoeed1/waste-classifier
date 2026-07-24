@@ -1,0 +1,18 @@
+{
+  "benchmark_runs": 30,
+  "keras": {
+    "latency_ms": 326.85,
+    "size_mb": 27.08
+  },
+  "onnx_fp32": {
+    "latency_ms": 25.64,
+    "size_mb": 8.94,
+    "speedup_vs_keras": 12.75
+  },
+  "onnx_int8_quantized": {
+    "latency_ms": 120.65,
+    "size_mb": 2.44,
+    "speedup_vs_keras": 2.71,
+    "size_reduction_vs_keras_pct": 91.0
+  }
+}

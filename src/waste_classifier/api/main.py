@@ -15,6 +15,7 @@ from PIL import Image
 
 from waste_classifier import config
 from waste_classifier.api.schemas import (
+    AgentResponse,
     ChatRequest,
     ChatResponse,
     DetectionItem,
@@ -22,8 +23,10 @@ from waste_classifier.api.schemas import (
     EnvironmentalImpact,
     HealthResponse,
     PredictionResponse,
+    ToolCall,
     TranscriptionResponse,
 )
+from waste_classifier.genai import agent as agent_module
 from waste_classifier.genai import assistant
 from waste_classifier.genai.groq_client import get_client
 from waste_classifier.ml import impact as impact_module
@@ -129,8 +132,28 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
     history = [m.model_dump() for m in request.history]
-    answer = assistant.ask(request.question, request.classification_label, history)
+    answer = assistant.ask(
+        request.question, request.classification_label, history, request.language
+    )
     return ChatResponse(answer=answer)
+
+
+@app.post("/api/agent", response_model=AgentResponse)
+def agent(request: ChatRequest) -> AgentResponse:
+    """Tool-calling agent variant: the LLM autonomously decides which tools to
+    invoke (recycling guide lookup, impact estimation, recyclability check)
+    before answering, rather than relying solely on RAG context."""
+    if not config.GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
+
+    history = [m.model_dump() for m in request.history]
+    result = agent_module.run_agent(
+        request.question, request.classification_label, history, request.language
+    )
+    return AgentResponse(
+        answer=result.answer,
+        tools_used=[ToolCall(name=t["name"], arguments=t["arguments"]) for t in result.tools_used],
+    )
 
 
 @app.post("/api/detect", response_model=DetectResponse)
@@ -197,7 +220,9 @@ def chat_stream(request: ChatRequest):
     history = [m.model_dump() for m in request.history]
 
     def event_generator():
-        yield from assistant.ask_stream(request.question, request.classification_label, history)
+        yield from assistant.ask_stream(
+            request.question, request.classification_label, history, request.language
+        )
 
     return StreamingResponse(event_generator(), media_type="text/plain")
 

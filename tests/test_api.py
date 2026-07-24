@@ -143,3 +143,33 @@ def test_chat_without_groq_key_returns_503_or_200(client, monkeypatch):
     if not config.GROQ_API_KEY:
         res = client.post("/api/chat", json={"question": "Can I recycle glass?"})
         assert res.status_code == 503
+
+
+def test_agent_without_groq_key_returns_503(client, monkeypatch):
+    from waste_classifier import config
+
+    monkeypatch.setattr(config, "GROQ_API_KEY", "")
+    res = client.post("/api/agent", json={"question": "How much CO2 for 1kg of metal?"})
+    assert res.status_code == 503
+
+
+def test_agent_with_groq_key_calls_tools_and_answers(client):
+    from waste_classifier import config
+
+    if not config.GROQ_API_KEY:
+        return  # covered by test_agent_without_groq_key_returns_503
+
+    res = client.post(
+        "/api/agent",
+        json={"question": "How much CO2 do I save recycling 2kg of aluminum cans?"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["answer"]
+    assert isinstance(body["tools_used"], list)
+    assert len(body["tools_used"]) > 0
+    assert body["tools_used"][0]["name"] in (
+        "estimate_environmental_impact",
+        "lookup_recycling_guide",
+        "check_recyclability",
+    )

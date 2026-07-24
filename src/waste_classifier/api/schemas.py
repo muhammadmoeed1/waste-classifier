@@ -40,10 +40,23 @@ class ChatRequest(BaseModel):
     question: str
     classification_label: str | None = None
     history: list[ChatMessage] = Field(default_factory=list)
+    language: str = Field("en", description="Response language: 'en' or 'ur' (Urdu)")
 
 
 class ChatResponse(BaseModel):
     answer: str
+
+
+class ToolCall(BaseModel):
+    name: str
+    arguments: str
+
+
+class AgentResponse(BaseModel):
+    answer: str
+    tools_used: list[ToolCall] = Field(
+        default_factory=list, description="Tools the agent called, in order, to answer"
+    )
 
 
 class TranscriptionResponse(BaseModel):

@@ -9,22 +9,30 @@
   <meta name="theme-color" content="#1d9e75">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="container">
 
+  <div class="top-controls">
+    <button id="langToggle" class="icon-toggle" title="اردو / English">اردو</button>
+    <button id="themeToggle" class="icon-toggle" title="Toggle dark mode">
+      <i class="fas fa-moon"></i>
+    </button>
+  </div>
+
   <div class="header">
     <div class="logo-ring"><i class="fas fa-recycle"></i></div>
     <h1>Smart Waste Classifier</h1>
-    <p>Upload a photo to identify its waste category, then ask the AI assistant<br>anything about how to recycle it.</p>
+    <p data-i18n="tagline">Upload a photo to identify its waste category, then ask the AI assistant<br>anything about how to recycle it.</p>
   </div>
 
   <!-- Mode switcher -->
   <div class="mode-tabs">
-    <button class="mode-tab active" data-mode="upload"><i class="fas fa-image"></i> Upload Photo</button>
-    <button class="mode-tab" data-mode="camera"><i class="fas fa-video"></i> Live Camera</button>
-    <button class="mode-tab" data-mode="multi"><i class="fas fa-layer-group"></i> Multi-Item</button>
+    <button class="mode-tab active" data-mode="upload"><i class="fas fa-image"></i> <span data-i18n="tabUpload">Upload Photo</span></button>
+    <button class="mode-tab" data-mode="camera"><i class="fas fa-video"></i> <span data-i18n="tabCamera">Live Camera</span></button>
+    <button class="mode-tab" data-mode="multi"><i class="fas fa-layer-group"></i> <span data-i18n="tabMulti">Multi-Item</span></button>
   </div>
 
   <!-- Classification card -->
@@ -34,8 +42,8 @@
     <div class="mode-panel" data-mode="upload">
       <div class="upload-zone" id="uploadZone">
         <i class="fas fa-cloud-arrow-up"></i>
-        <div class="uz-title">Drop an image here</div>
-        <div class="uz-sub">or click to browse &mdash; JPG, PNG, WEBP</div>
+        <div class="uz-title" data-i18n="dropTitle">Drop an image here</div>
+        <div class="uz-sub" data-i18n="dropSub">or click to browse &mdash; JPG, PNG, WEBP</div>
         <input type="file" id="fileInput" accept="image/*" capture="environment">
       </div>
 
@@ -48,10 +56,10 @@
 
       <div class="btn-row">
         <button type="button" class="btn" id="classifyBtn" disabled>
-          <i class="fas fa-magnifying-glass"></i> Classify waste
+          <i class="fas fa-magnifying-glass"></i> <span data-i18n="classifyBtn">Classify waste</span>
         </button>
         <button type="button" class="btn-clear" id="clearBtn">
-          <i class="fas fa-xmark"></i> Clear
+          <i class="fas fa-xmark"></i> <span data-i18n="clearBtn">Clear</span>
         </button>
       </div>
 
@@ -64,8 +72,12 @@
           <div class="badge" id="resultBadge"></div>
         </div>
 
+        <p class="uncertainty-warning" id="uncertaintyWarning" style="display:none;">
+          <i class="fas fa-triangle-exclamation"></i> <span id="uncertaintyText"></span>
+        </p>
+
         <div class="conf-row">
-          <span class="conf-label">Confidence</span>
+          <span class="conf-label" data-i18n="confidence">Confidence</span>
           <span class="conf-val" id="confVal"></span>
         </div>
         <div class="bar-bg"><div class="bar-fill" id="confBar"></div></div>
@@ -73,13 +85,13 @@
         <div class="probs" id="probsList"></div>
 
         <div class="gradcam-section" id="gradcamSection" style="display:none;">
-          <div class="section-label"><i class="fas fa-eye"></i> Where the model looked (Grad-CAM)</div>
+          <div class="section-label"><i class="fas fa-eye"></i> <span data-i18n="gradcamLabel">Where the model looked (Grad-CAM)</span></div>
           <img id="gradcamImg" alt="Grad-CAM heatmap" class="gradcam-img">
-          <p class="gradcam-hint">Warmer colors (red/yellow) show the regions the AI focused on most to make this prediction.</p>
+          <p class="gradcam-hint" data-i18n="gradcamHint">Warmer colors (red/yellow) show the regions the AI focused on most to make this prediction.</p>
         </div>
 
         <div class="impact-section" id="impactSection" style="display:none;">
-          <div class="section-label"><i class="fas fa-leaf"></i> Environmental impact</div>
+          <div class="section-label"><i class="fas fa-leaf"></i> <span data-i18n="impactLabel">Environmental impact</span></div>
           <div class="impact-card">
             <div class="impact-headline" id="impactHeadline"></div>
             <div class="impact-stats" id="impactStats"></div>
@@ -100,31 +112,39 @@
         </div>
         <div class="camera-placeholder" id="cameraPlaceholder">
           <i class="fas fa-video"></i>
-          <span>Camera is off</span>
+          <span data-i18n="cameraOff">Camera is off</span>
         </div>
       </div>
       <div class="btn-row">
-        <button type="button" class="btn" id="cameraStartBtn"><i class="fas fa-video"></i> Start camera</button>
-        <button type="button" class="btn-clear" id="cameraStopBtn" style="display:none;"><i class="fas fa-stop"></i> Stop</button>
+        <button type="button" class="btn" id="cameraStartBtn"><i class="fas fa-video"></i> <span data-i18n="cameraStart">Start camera</span></button>
+        <button type="button" class="btn-clear" id="cameraStopBtn" style="display:none;"><i class="fas fa-stop"></i> <span data-i18n="cameraStop">Stop</span></button>
       </div>
       <p class="error" id="cameraErrorMsg" style="display:none;"></p>
-      <p class="gradcam-hint">Classifies automatically about every 2 seconds while the camera is on (heatmap/impact are skipped here for speed — use Upload Photo for the full analysis).</p>
+      <p class="gradcam-hint" data-i18n="cameraHint">Classifies automatically about every 2 seconds while the camera is on (heatmap/impact are skipped here for speed — use Upload Photo for the full analysis).</p>
     </div>
 
     <!-- Multi-item detection mode -->
     <div class="mode-panel" data-mode="multi" style="display:none;">
       <div class="upload-zone" id="multiUploadZone">
         <i class="fas fa-cloud-arrow-up"></i>
-        <div class="uz-title">Drop a photo with multiple items</div>
-        <div class="uz-sub">e.g. several items laid out on a table &mdash; JPG, PNG, WEBP</div>
+        <div class="uz-title" data-i18n="multiDropTitle">Drop a photo with multiple items</div>
+        <div class="uz-sub" data-i18n="multiDropSub">e.g. several items laid out on a table &mdash; JPG, PNG, WEBP</div>
         <input type="file" id="multiFileInput" accept="image/*" capture="environment">
       </div>
+
+      <div class="preview-wrap" id="multiPreviewWrap">
+        <img id="multiPreviewImg" alt="Selected image">
+      </div>
+      <p class="fname" id="multiFname">
+        <i class="fas fa-file-image"></i><span id="multiFnameText"></span>
+      </p>
+
       <div class="btn-row">
         <button type="button" class="btn" id="multiDetectBtn" disabled>
-          <i class="fas fa-layer-group"></i> Detect items
+          <i class="fas fa-layer-group"></i> <span data-i18n="detectBtn">Detect items</span>
         </button>
         <button type="button" class="btn-clear" id="multiClearBtn">
-          <i class="fas fa-xmark"></i> Clear
+          <i class="fas fa-xmark"></i> <span data-i18n="clearBtn">Clear</span>
         </button>
       </div>
       <p class="error" id="multiErrorMsg" style="display:none;"></p>
@@ -138,14 +158,14 @@
 
   <!-- Category pills -->
   <div class="categories">
-    <div class="cats-label">Detectable categories</div>
+    <div class="cats-label" data-i18n="catsLabel">Detectable categories</div>
     <div class="cats-grid" id="catsGrid">
-      <div class="cat-item" data-cat="cardboard"><span class="ci-icon">📦</span><span class="ci-name">Cardboard</span></div>
-      <div class="cat-item" data-cat="glass"><span class="ci-icon">🍾</span><span class="ci-name">Glass</span></div>
-      <div class="cat-item" data-cat="metal"><span class="ci-icon">🥫</span><span class="ci-name">Metal</span></div>
-      <div class="cat-item" data-cat="paper"><span class="ci-icon">📄</span><span class="ci-name">Paper</span></div>
-      <div class="cat-item" data-cat="plastic"><span class="ci-icon">♻️</span><span class="ci-name">Plastic</span></div>
-      <div class="cat-item" data-cat="trash"><span class="ci-icon">🗑️</span><span class="ci-name">Trash</span></div>
+      <div class="cat-item" data-cat="cardboard"><span class="ci-icon">📦</span><span class="ci-name" data-i18n="cat_cardboard">Cardboard</span></div>
+      <div class="cat-item" data-cat="glass"><span class="ci-icon">🍾</span><span class="ci-name" data-i18n="cat_glass">Glass</span></div>
+      <div class="cat-item" data-cat="metal"><span class="ci-icon">🥫</span><span class="ci-name" data-i18n="cat_metal">Metal</span></div>
+      <div class="cat-item" data-cat="paper"><span class="ci-icon">📄</span><span class="ci-name" data-i18n="cat_paper">Paper</span></div>
+      <div class="cat-item" data-cat="plastic"><span class="ci-icon">♻️</span><span class="ci-name" data-i18n="cat_plastic">Plastic</span></div>
+      <div class="cat-item" data-cat="trash"><span class="ci-icon">🗑️</span><span class="ci-name" data-i18n="cat_trash">Trash</span></div>
     </div>
   </div>
 
@@ -153,20 +173,24 @@
   <div class="card chat-card">
     <div class="chat-header">
       <i class="fas fa-robot"></i>
-      <div>
-        <div class="chat-title">Recycling Assistant</div>
-        <div class="chat-sub">Powered by Groq &middot; ask about recycling rules, contamination, or your uploaded item</div>
+      <div class="chat-header-text">
+        <div class="chat-title" data-i18n="chatTitle">Recycling Assistant</div>
+        <div class="chat-sub" data-i18n="chatSub">Powered by Groq &middot; ask about recycling rules, contamination, or your uploaded item</div>
       </div>
+      <label class="agent-toggle" title="Agent mode: the AI autonomously calls tools (recycling guide lookup, CO2 calculator) instead of just answering from text">
+        <input type="checkbox" id="agentModeToggle">
+        <span data-i18n="agentModeLabel">🤖 Agent</span>
+      </label>
     </div>
 
     <div class="chat-messages" id="chatMessages">
       <div class="chat-msg assistant">
-        <div class="bubble">Hi! Upload an image or just ask me a recycling question &mdash; e.g. "Can I recycle a greasy pizza box?"</div>
+        <div class="bubble" id="chatWelcomeMsg" data-i18n="chatWelcome">Hi! Upload an image or just ask me a recycling question &mdash; e.g. "Can I recycle a greasy pizza box?"</div>
       </div>
     </div>
 
     <div class="chat-input-row">
-      <input type="text" id="chatInput" placeholder="Ask about recycling..." />
+      <input type="text" id="chatInput" placeholder="Ask about recycling..." data-i18n-placeholder="chatPlaceholder" />
       <button id="micBtn" class="btn-clear mic-btn" title="Ask by voice"><i class="fas fa-microphone"></i></button>
       <button id="chatSend" class="btn chat-send"><i class="fas fa-paper-plane"></i></button>
     </div>
