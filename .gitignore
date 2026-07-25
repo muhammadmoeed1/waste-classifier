@@ -19,6 +19,9 @@ artifacts/metrics/training_history.json
 # re-fetchable from https://github.com/ultralytics/assets, not our own artifact)
 yolov8n.pt
 
+# Local dev tools (e.g. cloudflared.exe for ad-hoc tunneling), not a project artifact
+.tools/
+
 # OS
 .DS_Store
 Thumbs.db

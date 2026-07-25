@@ -339,6 +339,18 @@ function showResult(data) {
   addAssistantMessage(t('classifiedMsg')(catLabel(data.label), data.confidence));
 }
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Minimal, safe markdown: escapes HTML first (so LLM output can never inject
+// tags), then converts **bold** markers to real <strong> tags.
+function renderMarkdownLite(text) {
+  return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
 function addUserMessage(text) {
   const div = document.createElement('div');
   div.className = 'chat-msg user';
@@ -351,8 +363,7 @@ function addUserMessage(text) {
 function addAssistantMessage(text) {
   const div = document.createElement('div');
   div.className = 'chat-msg assistant';
-  div.innerHTML = `<div class="bubble"></div>`;
-  div.querySelector('.bubble').textContent = text;
+  div.innerHTML = `<div class="bubble">${renderMarkdownLite(text)}</div>`;
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return div.querySelector('.bubble');
@@ -385,8 +396,7 @@ async function sendChatAgentMode(question, bubble) {
   }
 
   const data = await res.json();
-  bubble.innerHTML = toolTraceHtml(data.tools_used) + `<span></span>`;
-  bubble.querySelector('span:last-child').textContent = data.answer;
+  bubble.innerHTML = toolTraceHtml(data.tools_used) + `<span>${renderMarkdownLite(data.answer)}</span>`;
 
   chatHistory.push({ role: 'user', content: question });
   chatHistory.push({ role: 'assistant', content: data.answer });
@@ -409,7 +419,7 @@ async function sendChatStreamMode(question, bubble) {
     throw new Error(errBody.detail || `Request failed (${res.status})`);
   }
 
-  bubble.textContent = '';
+  bubble.innerHTML = '';
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let fullText = '';
@@ -419,7 +429,7 @@ async function sendChatStreamMode(question, bubble) {
     if (done) break;
     const chunk = decoder.decode(value, { stream: true });
     fullText += chunk;
-    bubble.textContent = fullText;
+    bubble.innerHTML = renderMarkdownLite(fullText);
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
