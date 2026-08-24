@@ -4,9 +4,9 @@ AI-powered waste classification with a Groq-backed recycling assistant — uploa
 photo, get an instant category prediction from a fine-tuned MobileNetV2 model, and
 ask a RAG-grounded chatbot follow-up questions about how to recycle it.
 
-**Live demo:** _add your deployed URL here after following [DEPLOYMENT.md](DEPLOYMENT.md)_
+**Live demo:** _deploying now — see [DEPLOYMENT.md](DEPLOYMENT.md) to run your own copy in minutes_
 
-![CI](https://github.com/<your-username>/waste-classifier/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/muhammadmoeed1/waste-classifier/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
@@ -208,7 +208,7 @@ waste-classifier/
 │   ├── api/            # FastAPI app, routes, request/response schemas
 │   ├── ml/              # training, evaluation, inference, Grad-CAM, impact facts
 │   ├── genai/           # Groq client + recycling assistant + Whisper transcription
-│   ├── rag/             # knowledge base loader + TF-IDF retriever
+│   ├── rag/             # knowledge base loader + embeddings/FAISS retriever (TF-IDF fallback)
 │   └── config.py        # centralized configuration (env-driven)
 ├── data/
 │   ├── dataset/          # TrashNet images (download separately, see below)
@@ -218,7 +218,7 @@ waste-classifier/
 ├── tests/                # pytest suite (classifier, RAG, API)
 ├── docker/Dockerfile
 ├── docker-compose.yml
-└── .github/workflows/    # CI (tests + lint) and HF Spaces deploy
+└── .github/workflows/    # CI (tests + lint)
 ```
 
 ## Running locally
@@ -330,6 +330,16 @@ deployment guide (Render, recommended and free with no card required).
 - Voice input reuses the same Groq account for speech-to-text (Whisper), so the
   whole GenAI surface — chat, RAG, and transcription — runs through one
   provider and one API key.
+
+## Acknowledgments
+
+- [TrashNet](https://github.com/garythung/trashnet) by Gary Thung & Mindy Yang — the labeled image dataset the classifier is trained on.
+- [Groq](https://groq.com) — LLM and Whisper inference.
+- [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) — pretrained object localization.
+
+## Author
+
+Built by [Muhammad Moeed](https://github.com/muhammadmoeed1).
 
 ## License
 
