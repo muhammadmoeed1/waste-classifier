@@ -4,8 +4,14 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from PIL import Image
 
 load_dotenv()
+
+# Decompression-bomb guard: without this, a small file that decodes to a huge
+# canvas (e.g. a crafted PNG) can blow up memory during Image.open()/predict()
+# well before our own MAX_UPLOAD_BYTES check ever sees a "large" file on disk.
+Image.MAX_IMAGE_PIXELS = 40_000_000
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -49,3 +55,14 @@ DISABLE_GRADCAM = os.getenv("DISABLE_GRADCAM", "false").lower() == "true"
 API_TITLE = "Smart Waste Classifier API"
 API_VERSION = __import__("waste_classifier").__version__
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+
+# --- Input hardening ---
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(8 * 1024 * 1024)))  # 8 MB
+ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_CHAT_HISTORY_MESSAGES = int(os.getenv("MAX_CHAT_HISTORY_MESSAGES", "12"))
+
+# --- Rate limiting (requests per minute, keyed by client IP) ---
+RATE_LIMIT_PREDICT = os.getenv("RATE_LIMIT_PREDICT", "30/minute")
+RATE_LIMIT_DETECT = os.getenv("RATE_LIMIT_DETECT", "30/minute")
+RATE_LIMIT_CHAT = os.getenv("RATE_LIMIT_CHAT", "10/minute")
+RATE_LIMIT_TRANSCRIBE = os.getenv("RATE_LIMIT_TRANSCRIBE", "5/minute")

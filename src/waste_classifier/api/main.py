@@ -7,13 +7,17 @@ import io
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from waste_classifier import config
+from waste_classifier.api import validation
 from waste_classifier.api.schemas import (
     AgentResponse,
     ChatRequest,
@@ -38,6 +42,20 @@ from waste_classifier.rag import retriever
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+limiter = Limiter(key_func=get_remote_address)
+
+
+def _warmup_classifier() -> None:
+    """Run one dummy inference so the first real request doesn't pay the
+    one-time TF graph-build cost while holding up a user."""
+    if not classifier.is_ready:
+        return
+    try:
+        dummy = Image.new("RGB", config.IMG_SIZE)
+        classifier.predict(dummy)
+    except Exception:
+        logger.exception("Warmup inference failed")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,6 +63,8 @@ async def lifespan(app: FastAPI):
         classifier.load()
     except Exception:
         logger.exception("Failed to load classifier model")
+
+    _warmup_classifier()
 
     try:
         retriever.build()
@@ -56,10 +76,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=config.API_TITLE, version=config.API_VERSION, lifespan=lifespan)
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# allow_credentials=True combined with a wildcard allow_origins is an invalid
+# combination per the CORS spec (browsers reject it) -- and unnecessary here
+# anyway, since the app uses no cookies/session auth.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -76,20 +102,24 @@ def health() -> HealthResponse:
 
 
 @app.post("/api/predict", response_model=PredictionResponse)
-async def predict(
-    image: UploadFile = File(...), include_gradcam: bool = True
+@limiter.limit(config.RATE_LIMIT_PREDICT)
+def predict(
+    request: Request, image: UploadFile = File(...), include_gradcam: bool = True
 ) -> PredictionResponse:
+    # Deliberately a sync `def`, not `async def`: the body below is CPU-bound
+    # TensorFlow/OpenCV work, and FastAPI only threadpool-offloads sync
+    # handlers. An async def here would run this on the event loop directly
+    # and block every other concurrent request (including /health).
     if not classifier.is_ready:
         raise HTTPException(
             status_code=503,
             detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
         )
 
-    contents = await image.read()
-    try:
-        img = Image.open(io.BytesIO(contents))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.") from exc
+    validation.reject_oversized_content_length(request)
+    validation.validate_image_content_type(image.content_type)
+    contents = validation.read_upload_bounded(image)
+    img = validation.open_and_verify_image(contents)
 
     result = classifier.predict(img)
 
@@ -127,28 +157,30 @@ async def predict(
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
+@limiter.limit(config.RATE_LIMIT_CHAT)
+def chat(request: Request, payload: ChatRequest) -> ChatResponse:
     if not config.GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
-    history = [m.model_dump() for m in request.history]
+    history = [m.model_dump() for m in payload.history]
     answer = assistant.ask(
-        request.question, request.classification_label, history, request.language
+        payload.question, payload.classification_label, history, payload.language
     )
     return ChatResponse(answer=answer)
 
 
 @app.post("/api/agent", response_model=AgentResponse)
-def agent(request: ChatRequest) -> AgentResponse:
+@limiter.limit(config.RATE_LIMIT_CHAT)
+def agent(request: Request, payload: ChatRequest) -> AgentResponse:
     """Tool-calling agent variant: the LLM autonomously decides which tools to
     invoke (recycling guide lookup, impact estimation, recyclability check)
     before answering, rather than relying solely on RAG context."""
     if not config.GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
-    history = [m.model_dump() for m in request.history]
+    history = [m.model_dump() for m in payload.history]
     result = agent_module.run_agent(
-        request.question, request.classification_label, history, request.language
+        payload.question, payload.classification_label, history, payload.language
     )
     return AgentResponse(
         answer=result.answer,
@@ -157,18 +189,20 @@ def agent(request: ChatRequest) -> AgentResponse:
 
 
 @app.post("/api/detect", response_model=DetectResponse)
-async def detect(image: UploadFile = File(...)) -> DetectResponse:
+@limiter.limit(config.RATE_LIMIT_DETECT)
+def detect(request: Request, image: UploadFile = File(...)) -> DetectResponse:
+    # Sync `def` for the same reason as /api/predict — YOLO/OpenCV/TensorFlow
+    # work below is CPU-bound and must not run directly on the event loop.
     if not classifier.is_ready:
         raise HTTPException(
             status_code=503,
             detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
         )
 
-    contents = await image.read()
-    try:
-        img = Image.open(io.BytesIO(contents))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.") from exc
+    validation.reject_oversized_content_length(request)
+    validation.validate_image_content_type(image.content_type)
+    contents = validation.read_upload_bounded(image)
+    img = validation.open_and_verify_image(contents)
 
     detections = detect_and_classify(img, classifier)
     annotated = draw_detections(img, detections)
@@ -192,11 +226,13 @@ async def detect(image: UploadFile = File(...)) -> DetectResponse:
 
 
 @app.post("/api/transcribe", response_model=TranscriptionResponse)
-async def transcribe(audio: UploadFile = File(...)) -> TranscriptionResponse:
+@limiter.limit(config.RATE_LIMIT_TRANSCRIBE)
+async def transcribe(request: Request, audio: UploadFile = File(...)) -> TranscriptionResponse:
     if not config.GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
-    contents = await audio.read()
+    validation.reject_oversized_content_length(request)
+    contents = validation.read_upload_bounded(audio)
     if not contents:
         raise HTTPException(status_code=400, detail="No audio data received.")
 
@@ -213,15 +249,16 @@ async def transcribe(audio: UploadFile = File(...)) -> TranscriptionResponse:
 
 
 @app.post("/api/chat/stream")
-def chat_stream(request: ChatRequest):
+@limiter.limit(config.RATE_LIMIT_CHAT)
+def chat_stream(request: Request, payload: ChatRequest):
     if not config.GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
-    history = [m.model_dump() for m in request.history]
+    history = [m.model_dump() for m in payload.history]
 
     def event_generator():
         yield from assistant.ask_stream(
-            request.question, request.classification_label, history, request.language
+            payload.question, payload.classification_label, history, payload.language
         )
 
     return StreamingResponse(event_generator(), media_type="text/plain")

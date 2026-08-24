@@ -23,6 +23,7 @@ uvicorn[standard]
 python-multipart
 pydantic
 python-dotenv
+slowapi
 
 # GenAI
 groq

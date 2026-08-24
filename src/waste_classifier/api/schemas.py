@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from waste_classifier import config
 
 
 class EnvironmentalImpact(BaseModel):
@@ -41,6 +43,16 @@ class ChatRequest(BaseModel):
     classification_label: str | None = None
     history: list[ChatMessage] = Field(default_factory=list)
     language: str = Field("en", description="Response language: 'en' or 'ur' (Urdu)")
+
+    @field_validator("history")
+    @classmethod
+    def _cap_history_length(cls, value: list[ChatMessage]) -> list[ChatMessage]:
+        """Keep only the most recent messages, so a client can't push
+        unbounded history into the LLM's token budget (and cost)."""
+        limit = config.MAX_CHAT_HISTORY_MESSAGES
+        if len(value) > limit:
+            return value[-limit:]
+        return value
 
 
 class ChatResponse(BaseModel):
