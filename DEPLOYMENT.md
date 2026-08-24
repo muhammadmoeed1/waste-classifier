@@ -21,7 +21,7 @@ This app ships as a Docker container in two profiles:
 4. **Instance type**: **Free**.
 5. Under **Environment Variables**, add:
    - `GROQ_API_KEY` — your key from https://console.groq.com/keys
-   - `GROQ_MODEL` — `llama-3.3-70b-versatile`
+   - `GROQ_MODEL` — `openai/gpt-oss-120b`
 6. Click **Create Web Service**. Render builds the image and redeploys
    automatically on every push to `main`.
 7. Your live URL appears at the top of the Render dashboard once the build

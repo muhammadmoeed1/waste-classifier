@@ -24,7 +24,7 @@ METRICS_DIR = Path(os.getenv("METRICS_DIR", ROOT_DIR / "artifacts" / "metrics"))
 
 # --- GenAI (Groq) ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 # --- RAG ---
 KNOWLEDGE_BASE_DIR = Path(
