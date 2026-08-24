@@ -12,6 +12,9 @@ __pycache__/
 # Dataset (download separately per README, not committed)
 data/dataset/
 
+# Local SQLite dev database (see DATABASE_URL in config.py)
+data/app.db
+
 # Large training history not needed for the repo
 artifacts/metrics/training_history.json
 

@@ -92,3 +92,16 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     retriever_ready: bool
     groq_configured: bool
+
+
+class StatsResponse(BaseModel):
+    total_scans: int
+    class_distribution: dict[str, int] = Field(
+        ..., description="Count of scans per predicted label"
+    )
+    mean_confidence: float
+    latency_p50_ms: float
+    latency_p95_ms: float
+    agent_tool_usage: dict[str, int] = Field(
+        ..., description="Count of times each agent tool was called, across all agent-mode chats"
+    )

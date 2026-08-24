@@ -66,3 +66,8 @@ RATE_LIMIT_PREDICT = os.getenv("RATE_LIMIT_PREDICT", "30/minute")
 RATE_LIMIT_DETECT = os.getenv("RATE_LIMIT_DETECT", "30/minute")
 RATE_LIMIT_CHAT = os.getenv("RATE_LIMIT_CHAT", "10/minute")
 RATE_LIMIT_TRANSCRIBE = os.getenv("RATE_LIMIT_TRANSCRIBE", "5/minute")
+
+# --- Persistence ---
+# SQLite file for local/dev by default. The schema (db/models.py) is written to
+# be Postgres-compatible so production deploys only need to change this URL.
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{ROOT_DIR / 'data' / 'app.db'}")

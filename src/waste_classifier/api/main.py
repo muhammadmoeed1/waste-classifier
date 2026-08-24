@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 
 import groq
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+import numpy as np
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +20,7 @@ from PIL import Image
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sqlmodel import Session, select
 
 from waste_classifier import config
 from waste_classifier.api import validation
@@ -29,9 +33,12 @@ from waste_classifier.api.schemas import (
     EnvironmentalImpact,
     HealthResponse,
     PredictionResponse,
+    StatsResponse,
     ToolCall,
     TranscriptionResponse,
 )
+from waste_classifier.db.models import ChatTurn, Scan
+from waste_classifier.db.session import get_session, init_db, safe_write
 from waste_classifier.genai import agent as agent_module
 from waste_classifier.genai import assistant
 from waste_classifier.genai.groq_client import get_client
@@ -61,6 +68,11 @@ def _warmup_classifier() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        init_db()
+    except Exception:
+        logger.exception("Failed to initialize database")
+
     try:
         classifier.load()
     except Exception:
@@ -106,7 +118,11 @@ def health() -> HealthResponse:
 @app.post("/api/predict", response_model=PredictionResponse)
 @limiter.limit(config.RATE_LIMIT_PREDICT)
 def predict(
-    request: Request, image: UploadFile = File(...), include_gradcam: bool = True
+    request: Request,
+    background_tasks: BackgroundTasks,
+    image: UploadFile = File(...),
+    include_gradcam: bool = True,
+    mode: str = "upload",
 ) -> PredictionResponse:
     # Deliberately a sync `def`, not `async def`: the body below is CPU-bound
     # TensorFlow/OpenCV work, and FastAPI only threadpool-offloads sync
@@ -118,6 +134,7 @@ def predict(
             detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
         )
 
+    start = time.perf_counter()
     validation.reject_oversized_content_length(request)
     validation.validate_image_content_type(image.content_type)
     contents = validation.read_upload_bounded(image)
@@ -148,6 +165,19 @@ def predict(
         else None
     )
 
+    background_tasks.add_task(
+        safe_write,
+        Scan(
+            session_id=request.headers.get("X-Session-Id", "anonymous"),
+            mode=mode,
+            predicted_label=result.label,
+            confidence=result.confidence,
+            all_probabilities=json.dumps(result.probabilities),
+            latency_ms=int((time.perf_counter() - start) * 1000),
+            image_hash=hashlib.sha256(contents).hexdigest(),
+        ),
+    )
+
     return PredictionResponse(
         label=result.label,
         confidence=result.confidence,
@@ -160,30 +190,59 @@ def predict(
 
 @app.post("/api/chat", response_model=ChatResponse)
 @limiter.limit(config.RATE_LIMIT_CHAT)
-def chat(request: Request, payload: ChatRequest) -> ChatResponse:
+def chat(request: Request, payload: ChatRequest, background_tasks: BackgroundTasks) -> ChatResponse:
     if not config.GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
+    start = time.perf_counter()
     history = [m.model_dump() for m in payload.history]
     answer = assistant.ask(
         payload.question, payload.classification_label, history, payload.language
     )
+
+    background_tasks.add_task(
+        safe_write,
+        ChatTurn(
+            session_id=request.headers.get("X-Session-Id", "anonymous"),
+            mode="rag",
+            question=payload.question,
+            latency_ms=int((time.perf_counter() - start) * 1000),
+            language=payload.language,
+        ),
+    )
+
     return ChatResponse(answer=answer)
 
 
 @app.post("/api/agent", response_model=AgentResponse)
 @limiter.limit(config.RATE_LIMIT_CHAT)
-def agent(request: Request, payload: ChatRequest) -> AgentResponse:
+def agent(
+    request: Request, payload: ChatRequest, background_tasks: BackgroundTasks
+) -> AgentResponse:
     """Tool-calling agent variant: the LLM autonomously decides which tools to
     invoke (recycling guide lookup, impact estimation, recyclability check)
     before answering, rather than relying solely on RAG context."""
     if not config.GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
+    start = time.perf_counter()
     history = [m.model_dump() for m in payload.history]
     result = agent_module.run_agent(
         payload.question, payload.classification_label, history, payload.language
     )
+
+    background_tasks.add_task(
+        safe_write,
+        ChatTurn(
+            session_id=request.headers.get("X-Session-Id", "anonymous"),
+            mode="agent",
+            question=payload.question,
+            tools_used=json.dumps(result.tools_used),
+            latency_ms=int((time.perf_counter() - start) * 1000),
+            language=payload.language,
+        ),
+    )
+
     return AgentResponse(
         answer=result.answer,
         tools_used=[ToolCall(name=t["name"], arguments=t["arguments"]) for t in result.tools_used],
@@ -192,7 +251,9 @@ def agent(request: Request, payload: ChatRequest) -> AgentResponse:
 
 @app.post("/api/detect", response_model=DetectResponse)
 @limiter.limit(config.RATE_LIMIT_DETECT)
-def detect(request: Request, image: UploadFile = File(...)) -> DetectResponse:
+def detect(
+    request: Request, background_tasks: BackgroundTasks, image: UploadFile = File(...)
+) -> DetectResponse:
     # Sync `def` for the same reason as /api/predict — YOLO/OpenCV/TensorFlow
     # work below is CPU-bound and must not run directly on the event loop.
     if not classifier.is_ready:
@@ -201,6 +262,7 @@ def detect(request: Request, image: UploadFile = File(...)) -> DetectResponse:
             detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
         )
 
+    start = time.perf_counter()
     validation.reject_oversized_content_length(request)
     validation.validate_image_content_type(image.content_type)
     contents = validation.read_upload_bounded(image)
@@ -212,6 +274,26 @@ def detect(request: Request, image: UploadFile = File(...)) -> DetectResponse:
     buf = io.BytesIO()
     annotated.save(buf, format="PNG")
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+
+    # Scan has a single predicted_label/confidence pair, but /api/detect finds
+    # zero or more items -- record the highest-confidence detection there (or
+    # "none" if nothing was found), and the full per-item breakdown in
+    # all_probabilities so no detection data is lost.
+    top = max(detections, key=lambda d: d.confidence, default=None)
+    background_tasks.add_task(
+        safe_write,
+        Scan(
+            session_id=request.headers.get("X-Session-Id", "anonymous"),
+            mode="multi",
+            predicted_label=top.label if top else "none",
+            confidence=top.confidence if top else 0.0,
+            all_probabilities=json.dumps(
+                [{"label": d.label, "confidence": d.confidence} for d in detections]
+            ),
+            latency_ms=int((time.perf_counter() - start) * 1000),
+            image_hash=hashlib.sha256(contents).hexdigest(),
+        ),
+    )
 
     return DetectResponse(
         detections=[
@@ -262,6 +344,8 @@ def chat_stream(request: Request, payload: ChatRequest):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured on the server.")
 
     history = [m.model_dump() for m in payload.history]
+    session_id = request.headers.get("X-Session-Id", "anonymous")
+    start = time.perf_counter()
 
     def event_generator():
         # By the time this generator runs, the HTTP response has already
@@ -269,23 +353,71 @@ def chat_stream(request: Request, payload: ChatRequest):
         # status code, so upstream failures must be signaled in-band as a
         # distinct SSE event type rather than an HTTP error response.
         try:
-            for delta in assistant.ask_stream(
-                payload.question, payload.classification_label, history, payload.language
-            ):
-                yield _sse("token", {"text": delta})
-        except groq.APITimeoutError:
-            yield _sse("error", {"detail": "The AI service timed out. Please try again."})
-            return
-        except groq.GroqError as exc:
-            yield _sse("error", {"detail": f"AI service error: {exc}"})
-            return
-        except Exception:
-            logger.exception("Unexpected error during chat stream")
-            yield _sse("error", {"detail": "Something went wrong. Please try again."})
-            return
-        yield _sse("done", {})
+            try:
+                for delta in assistant.ask_stream(
+                    payload.question, payload.classification_label, history, payload.language
+                ):
+                    yield _sse("token", {"text": delta})
+            except groq.APITimeoutError:
+                yield _sse("error", {"detail": "The AI service timed out. Please try again."})
+                return
+            except groq.GroqError as exc:
+                yield _sse("error", {"detail": f"AI service error: {exc}"})
+                return
+            except Exception:
+                logger.exception("Unexpected error during chat stream")
+                yield _sse("error", {"detail": "Something went wrong. Please try again."})
+                return
+            yield _sse("done", {})
+        finally:
+            # The response has already been sent by this point, so writing
+            # here (success or error) can't add latency to what the user saw.
+            safe_write(
+                ChatTurn(
+                    session_id=session_id,
+                    mode="rag",
+                    question=payload.question,
+                    latency_ms=int((time.perf_counter() - start) * 1000),
+                    language=payload.language,
+                )
+            )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.get("/api/stats", response_model=StatsResponse)
+def stats(session: Session = Depends(get_session)) -> StatsResponse:
+    """Aggregate traffic stats, driven entirely by the Scan/ChatTurn rows
+    written above. Phase 2's dashboard reads from this endpoint."""
+    scans = session.exec(select(Scan)).all()
+    agent_turns = session.exec(select(ChatTurn).where(ChatTurn.mode == "agent")).all()
+
+    class_distribution: dict[str, int] = {}
+    for s in scans:
+        class_distribution[s.predicted_label] = class_distribution.get(s.predicted_label, 0) + 1
+
+    confidences = [s.confidence for s in scans]
+    latencies = [s.latency_ms for s in scans]
+    mean_confidence = float(np.mean(confidences)) if confidences else 0.0
+    latency_p50 = float(np.percentile(latencies, 50)) if latencies else 0.0
+    latency_p95 = float(np.percentile(latencies, 95)) if latencies else 0.0
+
+    agent_tool_usage: dict[str, int] = {}
+    for turn in agent_turns:
+        if not turn.tools_used:
+            continue
+        for tool_call in json.loads(turn.tools_used):
+            name = tool_call["name"] if isinstance(tool_call, dict) else tool_call
+            agent_tool_usage[name] = agent_tool_usage.get(name, 0) + 1
+
+    return StatsResponse(
+        total_scans=len(scans),
+        class_distribution=class_distribution,
+        mean_confidence=mean_confidence,
+        latency_p50_ms=latency_p50,
+        latency_p95_ms=latency_p95,
+        agent_tool_usage=agent_tool_usage,
+    )
 
 
 # Serve the static frontend (web/) at the root, after API routes are registered.

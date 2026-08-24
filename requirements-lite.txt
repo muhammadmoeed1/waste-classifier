@@ -25,5 +25,8 @@ pydantic
 python-dotenv
 slowapi
 
+# Persistence
+sqlmodel
+
 # GenAI
 groq

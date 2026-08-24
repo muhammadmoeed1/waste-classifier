@@ -96,6 +96,14 @@ const translations = {
 
 let currentLang = localStorage.getItem('lang') || 'en';
 
+// Anonymous per-browser session id, used only to group a user's own scans/chat
+// turns for /api/stats aggregates -- never tied to an account or identity.
+let sessionId = localStorage.getItem('sessionId');
+if (!sessionId) {
+  sessionId = crypto.randomUUID();
+  localStorage.setItem('sessionId', sessionId);
+}
+
 function t(key) {
   return (translations[currentLang] && translations[currentLang][key]) || translations.en[key] || key;
 }
@@ -247,7 +255,11 @@ classifyBtn.addEventListener('click', async () => {
   try {
     const formData = new FormData();
     formData.append('image', file);
-    const res = await fetch('/api/predict', { method: 'POST', body: formData });
+    const res = await fetch('/api/predict', {
+      method: 'POST',
+      headers: { 'X-Session-Id': sessionId },
+      body: formData,
+    });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
       throw new Error(errBody.detail || `Request failed (${res.status})`);
@@ -381,7 +393,7 @@ function toolTraceHtml(toolsUsed) {
 async function sendChatAgentMode(question, bubble) {
   const res = await fetch('/api/agent', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
     body: JSON.stringify({
       question,
       classification_label: lastClassificationLabel,
@@ -405,7 +417,7 @@ async function sendChatAgentMode(question, bubble) {
 async function sendChatStreamMode(question, bubble) {
   const res = await fetch('/api/chat/stream', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Session-Id': sessionId },
     body: JSON.stringify({
       question,
       classification_label: lastClassificationLabel,
@@ -649,7 +661,11 @@ async function captureAndClassifyFrame() {
 
     const formData = new FormData();
     formData.append('image', blob, 'frame.jpg');
-    const res = await fetch('/api/predict?include_gradcam=false', { method: 'POST', body: formData });
+    const res = await fetch('/api/predict?include_gradcam=false&mode=camera', {
+      method: 'POST',
+      headers: { 'X-Session-Id': sessionId },
+      body: formData,
+    });
     if (!res.ok) return;
 
     const data = await res.json();
@@ -718,7 +734,11 @@ multiDetectBtn.addEventListener('click', async () => {
   try {
     const formData = new FormData();
     formData.append('image', file);
-    const res = await fetch('/api/detect', { method: 'POST', body: formData });
+    const res = await fetch('/api/detect', {
+      method: 'POST',
+      headers: { 'X-Session-Id': sessionId },
+      body: formData,
+    });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
       throw new Error(errBody.detail || `Request failed (${res.status})`);
