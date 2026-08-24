@@ -249,6 +249,13 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .cat-item.active { border-color: var(--accent); background: var(--accent-light); }
 .cat-item.active .ci-name { color: var(--accent-dark); font-weight: 500; }
 
+.feedback-section { margin-top: 1.25rem; }
+.feedback-pill { cursor: pointer; font: inherit; color: inherit; width: 100%; }
+.feedback-pill:hover, .feedback-pill:focus-visible { border-color: var(--accent); background: var(--accent-light); }
+.feedback-pill.submitted { border-color: var(--accent); background: var(--accent-light); }
+.feedback-pill.submitted .ci-name { color: var(--accent-dark); font-weight: 500; }
+.feedback-confirm { margin-top: 10px; font-size: 13px; color: var(--accent-dark); display: flex; align-items: center; gap: 6px; }
+
 /* Chat widget */
 .chat-card { padding: 0; overflow: hidden; }
 .chat-header { display: flex; align-items: center; gap: 12px; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }

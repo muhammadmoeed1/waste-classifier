@@ -9,6 +9,7 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import groq
 import numpy as np
@@ -31,6 +32,8 @@ from waste_classifier.api.schemas import (
     DetectionItem,
     DetectResponse,
     EnvironmentalImpact,
+    FeedbackRequest,
+    FeedbackResponse,
     HealthResponse,
     PredictionResponse,
     StatsResponse,
@@ -38,7 +41,7 @@ from waste_classifier.api.schemas import (
     TranscriptionResponse,
 )
 from waste_classifier.db.models import ChatTurn, Scan
-from waste_classifier.db.session import get_session, init_db, safe_write
+from waste_classifier.db.session import get_session, init_db, safe_write, write_and_get_id
 from waste_classifier.genai import agent as agent_module
 from waste_classifier.genai import assistant
 from waste_classifier.genai.groq_client import get_client
@@ -119,7 +122,6 @@ def health() -> HealthResponse:
 @limiter.limit(config.RATE_LIMIT_PREDICT)
 def predict(
     request: Request,
-    background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     include_gradcam: bool = True,
     mode: str = "upload",
@@ -165,8 +167,11 @@ def predict(
         else None
     )
 
-    background_tasks.add_task(
-        safe_write,
+    # Written synchronously (not via BackgroundTasks like the other endpoints)
+    # so the response below can include the new row's id -- the frontend
+    # needs it to attach feedback ("wrong? tap the right category") to this
+    # exact prediction. write_and_get_id() still never raises on its own.
+    scan_id = write_and_get_id(
         Scan(
             session_id=request.headers.get("X-Session-Id", "anonymous"),
             mode=mode,
@@ -175,7 +180,7 @@ def predict(
             all_probabilities=json.dumps(result.probabilities),
             latency_ms=int((time.perf_counter() - start) * 1000),
             image_hash=hashlib.sha256(contents).hexdigest(),
-        ),
+        )
     )
 
     return PredictionResponse(
@@ -185,6 +190,7 @@ def predict(
         probabilities=result.probabilities,
         gradcam_image=gradcam_image,
         impact=impact_response,
+        scan_id=scan_id,
     )
 
 
@@ -307,6 +313,38 @@ def detect(
         ],
         annotated_image=f"data:image/png;base64,{encoded}",
     )
+
+
+@app.post("/api/scans/{scan_id}/feedback", response_model=FeedbackResponse)
+@limiter.limit(config.RATE_LIMIT_PREDICT)
+def scan_feedback(
+    request: Request,
+    scan_id: int,
+    payload: FeedbackRequest,
+    session: Session = Depends(get_session),
+) -> FeedbackResponse:
+    """Records a user's correction of a past prediction. This is the data
+    source Phase 3's retraining pipeline depends on."""
+    scan = session.get(Scan, scan_id)
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Scan not found.")
+
+    known_labels = classifier.class_names
+    if payload.corrected_label not in known_labels:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown label '{payload.corrected_label}'. "
+                f"Must be one of: {sorted(known_labels)}"
+            ),
+        )
+
+    scan.feedback_label = payload.corrected_label
+    scan.feedback_at = datetime.now(UTC)
+    session.add(scan)
+    session.commit()
+
+    return FeedbackResponse(scan_id=scan_id, feedback_label=scan.feedback_label)
 
 
 @app.post("/api/transcribe", response_model=TranscriptionResponse)

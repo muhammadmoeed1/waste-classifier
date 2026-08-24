@@ -13,6 +13,8 @@ const translations = {
     gradcamLabel: 'Where the model looked (Grad-CAM)',
     gradcamHint: 'Warmer colors (red/yellow) show the regions the AI focused on most to make this prediction.',
     impactLabel: 'Environmental impact',
+    feedbackPrompt: 'Wrong? Tap the right category',
+    feedbackThanks: 'Thanks — feedback recorded.',
     cameraOff: 'Camera is off',
     cameraStart: 'Start camera',
     cameraStop: 'Stop',
@@ -59,6 +61,8 @@ const translations = {
     gradcamLabel: 'ماڈل نے کہاں دیکھا (Grad-CAM)',
     gradcamHint: 'زیادہ گرم رنگ (سرخ/پیلا) ان حصوں کو ظاہر کرتے ہیں جن پر AI نے سب سے زیادہ توجہ دی۔',
     impactLabel: 'ماحولیاتی اثر',
+    feedbackPrompt: 'غلط ہے؟ درست قسم پر ٹیپ کریں',
+    feedbackThanks: 'شکریہ — رائے محفوظ کر لی گئی۔',
     cameraOff: 'کیمرہ بند ہے',
     cameraStart: 'کیمرہ شروع کریں',
     cameraStop: 'روکیں',
@@ -180,6 +184,8 @@ const impactSection = document.getElementById('impactSection');
 const impactHeadline = document.getElementById('impactHeadline');
 const impactStats = document.getElementById('impactStats');
 const impactFact = document.getElementById('impactFact');
+const feedbackGrid = document.getElementById('feedbackGrid');
+const feedbackConfirm = document.getElementById('feedbackConfirm');
 
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
@@ -188,7 +194,34 @@ const micBtn = document.getElementById('micBtn');
 const agentModeToggle = document.getElementById('agentModeToggle');
 
 let lastClassificationLabel = null;
+let lastScanId = null;
 let chatHistory = [];
+
+function resetFeedbackUI() {
+  feedbackConfirm.style.display = 'none';
+  feedbackGrid.querySelectorAll('.feedback-pill').forEach((el) => el.classList.remove('submitted'));
+}
+
+feedbackGrid.addEventListener('click', async (e) => {
+  const pill = e.target.closest('.feedback-pill');
+  if (!pill || lastScanId == null) return;
+
+  const correctedLabel = pill.dataset.cat;
+  try {
+    const res = await fetch(`/api/scans/${lastScanId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ corrected_label: correctedLabel }),
+    });
+    if (!res.ok) return;
+
+    feedbackGrid.querySelectorAll('.feedback-pill').forEach((el) => el.classList.remove('submitted'));
+    pill.classList.add('submitted');
+    feedbackConfirm.style.display = 'flex';
+  } catch {
+    // Best-effort: feedback is a nice-to-have, not worth surfacing an error for.
+  }
+});
 
 // Reusable drag-and-drop visual feedback + drop handling for an upload zone.
 function setupDragAndDrop(zoneEl, inputEl) {
@@ -242,6 +275,8 @@ clearBtn.addEventListener('click', () => {
   hideResult();
   catItems.forEach(el => el.classList.remove('active'));
   lastClassificationLabel = null;
+  lastScanId = null;
+  resetFeedbackUI();
 });
 
 classifyBtn.addEventListener('click', async () => {
@@ -289,6 +324,8 @@ const UNCERTAINTY_THRESHOLD = 60;
 
 function showResult(data) {
   lastClassificationLabel = data.label;
+  lastScanId = data.scan_id ?? null;
+  resetFeedbackUI();
 
   resultLabel.textContent = catLabel(data.label);
   resultBadge.className = 'badge ' + (data.recyclable ? 'badge-rec' : 'badge-norec');

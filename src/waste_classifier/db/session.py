@@ -46,3 +46,19 @@ def safe_write(record: SQLModel) -> None:
             session.commit()
     except Exception:
         logger.exception("Failed to persist %s", type(record).__name__)
+
+
+def write_and_get_id(record: SQLModel) -> int | None:
+    """Like safe_write, but commits synchronously and returns the new
+    primary key -- for the one case (predict) where the response needs to
+    reference its own row (e.g. so the client can later attach feedback to
+    it). Returns None on failure instead of raising."""
+    try:
+        with Session(engine) as session:
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+            return record.id
+    except Exception:
+        logger.exception("Failed to persist %s", type(record).__name__)
+        return None

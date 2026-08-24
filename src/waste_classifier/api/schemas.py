@@ -31,6 +31,9 @@ class PredictionResponse(BaseModel):
     impact: EnvironmentalImpact | None = Field(
         None, description="Approximate environmental impact of recycling this category"
     )
+    scan_id: int | None = Field(
+        None, description="Persisted Scan row id, used to submit feedback on this prediction"
+    )
 
 
 class ChatMessage(BaseModel):
@@ -92,6 +95,15 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     retriever_ready: bool
     groq_configured: bool
+
+
+class FeedbackRequest(BaseModel):
+    corrected_label: str = Field(..., description="The waste category the user says is correct")
+
+
+class FeedbackResponse(BaseModel):
+    scan_id: int
+    feedback_label: str
 
 
 class StatsResponse(BaseModel):

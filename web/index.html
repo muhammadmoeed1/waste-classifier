@@ -98,6 +98,21 @@
             <p class="impact-fact" id="impactFact"></p>
           </div>
         </div>
+
+        <div class="feedback-section">
+          <div class="section-label"><i class="fas fa-pen"></i> <span data-i18n="feedbackPrompt">Wrong? Tap the right category</span></div>
+          <div class="cats-grid" id="feedbackGrid">
+            <button type="button" class="cat-item feedback-pill" data-cat="cardboard"><span class="ci-icon">📦</span><span class="ci-name" data-i18n="cat_cardboard">Cardboard</span></button>
+            <button type="button" class="cat-item feedback-pill" data-cat="glass"><span class="ci-icon">🍾</span><span class="ci-name" data-i18n="cat_glass">Glass</span></button>
+            <button type="button" class="cat-item feedback-pill" data-cat="metal"><span class="ci-icon">🥫</span><span class="ci-name" data-i18n="cat_metal">Metal</span></button>
+            <button type="button" class="cat-item feedback-pill" data-cat="paper"><span class="ci-icon">📄</span><span class="ci-name" data-i18n="cat_paper">Paper</span></button>
+            <button type="button" class="cat-item feedback-pill" data-cat="plastic"><span class="ci-icon">♻️</span><span class="ci-name" data-i18n="cat_plastic">Plastic</span></button>
+            <button type="button" class="cat-item feedback-pill" data-cat="trash"><span class="ci-icon">🗑️</span><span class="ci-name" data-i18n="cat_trash">Trash</span></button>
+          </div>
+          <p class="feedback-confirm" id="feedbackConfirm" style="display:none;">
+            <i class="fas fa-circle-check"></i> <span data-i18n="feedbackThanks">Thanks — feedback recorded.</span>
+          </p>
+        </div>
       </div>
     </div>
 
