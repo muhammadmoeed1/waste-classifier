@@ -15,8 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-lite.txt .
-RUN pip install --no-cache-dir -r requirements-lite.txt
+# Installed from the pinned lockfile (see requirements-lite.lock.txt), not
+# the floating requirements-lite.txt, so image builds are reproducible.
+COPY requirements-lite.lock.txt .
+RUN pip install --no-cache-dir -r requirements-lite.lock.txt
 
 COPY src/ src/
 COPY web/ web/

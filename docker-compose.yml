@@ -1,3 +1,11 @@
+# Local dev only. Deliberately kept mounting ./artifacts (rather than relying
+# on what the image fetched at build time) so you can retrain the model
+# locally (python -m waste_classifier.ml.train) and pick it up with a
+# container restart, no rebuild -- fast iteration matters more here than
+# matching the deployed image exactly. Production (Render) does NOT use this
+# file; it builds docker/Dockerfile.lite directly, which always fetches
+# pinned artifacts at build time (see scripts/fetch_artifacts.py) so there's
+# no divergence risk there.
 services:
   api:
     build:

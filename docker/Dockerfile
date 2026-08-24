@@ -8,8 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Installed from the pinned lockfile (see requirements.lock.txt), not the
+# floating requirements.txt, so image builds are reproducible instead of
+# drifting on `tensorflow>=2.16`-style version floors.
+COPY requirements.lock.txt .
+RUN pip install --no-cache-dir -r requirements.lock.txt
 
 # Bake the sentence-embedding model into the image at build time, so the
 # container doesn't need a runtime download from the Hugging Face Hub on

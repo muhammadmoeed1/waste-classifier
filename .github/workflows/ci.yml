@@ -27,3 +27,13 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # This is the actual artifact that gets deployed (Render uses this exact
+      # Dockerfile) -- the test/lint job above never verifies it still builds.
+      - name: Build deployable image (lite profile)
+        run: docker build -f docker/Dockerfile.lite -t waste-classifier-lite .
