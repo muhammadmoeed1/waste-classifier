@@ -283,6 +283,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .chat-msg .bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
 .chat-msg.assistant .bubble { background: var(--accent-light); color: var(--fg); border-bottom-left-radius: 4px; }
 .chat-msg.user .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.chat-error-text { color: var(--danger-fg); font-weight: 500; }
 
 .chat-input-row { display: flex; gap: 8px; padding: 1rem 1.25rem; border-top: 1px solid var(--border); }
 .chat-input-row input {

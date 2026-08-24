@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass, field
 
 from waste_classifier import config
-from waste_classifier.genai.groq_client import get_client
+from waste_classifier.genai.groq_client import get_client, safe_call
 from waste_classifier.genai.tools import TOOL_SCHEMAS, execute_tool
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,8 @@ def run_agent(
     tools_used: list[dict] = []
 
     for _ in range(MAX_TOOL_ROUNDS):
-        response = client.chat.completions.create(
+        response = safe_call(
+            client.chat.completions.create,
             model=config.GROQ_MODEL,
             messages=messages,
             tools=TOOL_SCHEMAS,
@@ -105,7 +106,8 @@ def run_agent(
             )
 
     # Tool-round cap reached — ask once more for a final answer without tools.
-    final = client.chat.completions.create(
+    final = safe_call(
+        client.chat.completions.create,
         model=config.GROQ_MODEL,
         messages=messages,
         temperature=0.3,

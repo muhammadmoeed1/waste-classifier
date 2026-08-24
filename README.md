@@ -66,14 +66,22 @@ flowchart TD
 
     Q --> RAGPATH{Agent mode?}
     RAGPATH -->|off: plain RAG| RAG[Sentence embeddings<br/>+ FAISS vector search]
-    RAG --> LLM[Groq LLM<br/>Llama 3.3 70B]
+    RAG --> LLM[Groq LLM<br/>openai/gpt-oss-120b]
     RAGPATH -->|on: agent| AGENT[Groq tool-calling agent]
     AGENT -->|calls as needed| TOOLS[recycling guide lookup /<br/>CO2 estimator / recyclability check]
     TOOLS --> AGENT
     AGENT --> LLM
-    LLM -->|streamed or tool trace| API
-    API -->|SSE stream / JSON| UI
+    LLM -->|token-by-token| API
+    API -->|"SSE: token / error / done events"| UI
 ```
+
+The chat endpoint comes in two flavors: `/api/chat` (and `/api/agent`) return a
+single JSON response, while `/api/chat/stream` streams real Server-Sent Events
+— `event: token` frames as the answer is generated, then a final `event: done`.
+If the Groq API fails mid-stream (timeout, rate limit, connection drop), the
+response has already started and its HTTP status can't change, so the failure
+is signaled in-band as an `event: error` frame with a `detail` message instead
+of the connection just dropping silently.
 
 ## Tech stack
 
@@ -84,7 +92,7 @@ flowchart TD
 | Explainable AI       | Grad-CAM (gradient-based class activation mapping), implemented from scratch with `tf.GradientTape` |
 | Multi-item detection | Pretrained YOLOv8n (ultralytics) + OpenCV contour proposals, unioned and resolved via confidence-based suppression |
 | Backend API         | FastAPI, Pydantic, Uvicorn                                          |
-| Generative AI       | Groq API (Llama 3.3 70B) — streaming chat, **tool-calling agent**, + Whisper speech-to-text |
+| Generative AI       | Groq API (`openai/gpt-oss-120b`) — streaming chat, **tool-calling agent**, + Whisper speech-to-text |
 | Retrieval (RAG)     | Sentence-transformer embeddings (`all-MiniLM-L6-v2`) + FAISS vector search over a markdown knowledge base |
 | Frontend            | Vanilla HTML/CSS/JS, live camera (MediaRecorder/getUserMedia), server-sent streaming chat |
 | PWA                  | Web app manifest + service worker — installable, offline-capable app shell |

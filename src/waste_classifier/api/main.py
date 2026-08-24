@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 from contextlib import asynccontextmanager
 
+import groq
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -248,6 +250,11 @@ async def transcribe(request: Request, audio: UploadFile = File(...)) -> Transcr
     return TranscriptionResponse(text=response.text)
 
 
+def _sse(event: str, data: dict) -> str:
+    """Format one Server-Sent Events frame."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
 @app.post("/api/chat/stream")
 @limiter.limit(config.RATE_LIMIT_CHAT)
 def chat_stream(request: Request, payload: ChatRequest):
@@ -257,11 +264,28 @@ def chat_stream(request: Request, payload: ChatRequest):
     history = [m.model_dump() for m in payload.history]
 
     def event_generator():
-        yield from assistant.ask_stream(
-            payload.question, payload.classification_label, history, payload.language
-        )
+        # By the time this generator runs, the HTTP response has already
+        # started (200 + headers sent) -- an exception here can't change the
+        # status code, so upstream failures must be signaled in-band as a
+        # distinct SSE event type rather than an HTTP error response.
+        try:
+            for delta in assistant.ask_stream(
+                payload.question, payload.classification_label, history, payload.language
+            ):
+                yield _sse("token", {"text": delta})
+        except groq.APITimeoutError:
+            yield _sse("error", {"detail": "The AI service timed out. Please try again."})
+            return
+        except groq.GroqError as exc:
+            yield _sse("error", {"detail": f"AI service error: {exc}"})
+            return
+        except Exception:
+            logger.exception("Unexpected error during chat stream")
+            yield _sse("error", {"detail": "Something went wrong. Please try again."})
+            return
+        yield _sse("done", {})
 
-    return StreamingResponse(event_generator(), media_type="text/plain")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Serve the static frontend (web/) at the root, after API routes are registered.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from waste_classifier import config
-from waste_classifier.genai.groq_client import get_client
+from waste_classifier.genai.groq_client import get_client, safe_call
 from waste_classifier.rag import retriever
 
 SYSTEM_PROMPT = """\
@@ -66,7 +66,8 @@ def ask(
 ) -> str:
     """Non-streaming chat completion (used by tests and simple clients)."""
     client = get_client()
-    response = client.chat.completions.create(
+    response = safe_call(
+        client.chat.completions.create,
         model=config.GROQ_MODEL,
         messages=_build_messages(question, classification_label, history, language),
         temperature=0.4,
@@ -80,7 +81,15 @@ def ask_stream(
     history: list[dict] | None = None,
     language: str = "en",
 ) -> Iterator[str]:
-    """Streaming chat completion — yields text chunks as they arrive from Groq."""
+    """Streaming chat completion — yields text chunks as they arrive from Groq.
+
+    Deliberately does NOT use safe_call here: by the time this generator is
+    iterated, the HTTP response has typically already started streaming (200
+    + headers sent), so raising HTTPException wouldn't change the status code
+    anyway. Callers consuming this generator (see api/main.py's
+    /api/chat/stream) are expected to catch groq.GroqError themselves and
+    translate it into an in-band SSE `event: error` frame instead.
+    """
     client = get_client()
     stream = client.chat.completions.create(
         model=config.GROQ_MODEL,

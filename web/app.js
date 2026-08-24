@@ -423,18 +423,53 @@ async function sendChatStreamMode(question, bubble) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let fullText = '';
+  let buffer = '';
+  let sawError = false;
 
+  // Real SSE framing: "event: <type>\ndata: <json>\n\n". A single reader
+  // chunk can split a frame mid-way, so accumulate into `buffer` and only
+  // process complete frames (up to the next blank-line separator).
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    fullText += chunk;
-    bubble.innerHTML = renderMarkdownLite(fullText);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    buffer += decoder.decode(value, { stream: true });
+
+    let boundary;
+    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+      const rawFrame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      let eventType = 'message';
+      let dataLine = '';
+      for (const line of rawFrame.split('\n')) {
+        if (line.startsWith('event:')) eventType = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLine = line.slice(5).trim();
+      }
+      if (!dataLine) continue;
+
+      let payload;
+      try {
+        payload = JSON.parse(dataLine);
+      } catch {
+        continue;
+      }
+
+      if (eventType === 'token') {
+        fullText += payload.text || '';
+        bubble.innerHTML = renderMarkdownLite(fullText);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      } else if (eventType === 'error') {
+        sawError = true;
+        const message = payload.detail || 'Something went wrong.';
+        bubble.innerHTML = `<span class="chat-error-text">Error: ${escapeHtml(message)}</span>`;
+      }
+    }
   }
 
-  chatHistory.push({ role: 'user', content: question });
-  chatHistory.push({ role: 'assistant', content: fullText });
+  if (!sawError) {
+    chatHistory.push({ role: 'user', content: question });
+    chatHistory.push({ role: 'assistant', content: fullText });
+  }
 }
 
 async function sendChat() {
