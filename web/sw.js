@@ -1,4 +1,4 @@
-const CACHE_NAME = 'waste-classifier-v3';
+const CACHE_NAME = 'waste-classifier-v4';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -8,6 +8,11 @@ const APP_SHELL = [
   '/favicon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/vendor/fontawesome/css/fontawesome.min.css',
+  '/vendor/fontawesome/css/solid.min.css',
+  '/vendor/fontawesome/webfonts/fa-solid-900.woff2',
+  '/vendor/fonts/noto-nastaliq-urdu.css',
+  '/vendor/fonts/noto-nastaliq-urdu.woff2',
 ];
 
 self.addEventListener('install', (event) => {
