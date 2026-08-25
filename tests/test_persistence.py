@@ -155,6 +155,14 @@ def test_stats_reflects_seeded_scan_rows(client):
     assert body["class_distribution"] == {"plastic": 2, "glass": 1}
     assert body["mean_confidence"] == pytest.approx(80.0)
     assert body["latency_p50_ms"] == pytest.approx(200.0)
+    # plastic and glass are both in config.RECYCLABLE_CLASSES
+    assert body["recyclable_pct"] == pytest.approx(100.0)
+    # confidences 90/70/80 -> buckets 9/7/8 (each bucket spans 10 percentage points)
+    assert body["confidence_histogram"][9] == 1
+    assert body["confidence_histogram"][7] == 1
+    assert body["confidence_histogram"][8] == 1
+    assert sum(body["confidence_histogram"]) == 3
+    assert len(body["latency_points"]) == 3
 
 
 def test_stats_with_no_data_returns_zeroed_response(client):
@@ -164,4 +172,47 @@ def test_stats_with_no_data_returns_zeroed_response(client):
     assert body["total_scans"] == 0
     assert body["class_distribution"] == {}
     assert body["mean_confidence"] == 0.0
+    assert body["recyclable_pct"] == 0.0
+    assert body["confidence_histogram"] == [0] * 10
+    assert body["confusion_matrix"] == []
+    assert body["latency_points"] == []
     assert body["agent_tool_usage"] == {}
+    # Loaded from the real committed artifacts/metrics/metrics.json, independent of scan data
+    assert body["training_distribution_pct"]
+    assert pytest.approx(sum(body["training_distribution_pct"].values()), abs=0.1) == 100.0
+
+
+def test_stats_confusion_matrix_reflects_feedback_corrections(client):
+    from waste_classifier.db.models import Scan
+
+    with Session(client.db_engine) as session:
+        session.add(
+            Scan(
+                session_id="seed-4",
+                mode="upload",
+                predicted_label="glass",
+                confidence=55.0,
+                all_probabilities="{}",
+                latency_ms=150,
+                image_hash="d" * 64,
+                feedback_label="plastic",
+            )
+        )
+        # No feedback on this one -- must not appear in the confusion matrix.
+        session.add(
+            Scan(
+                session_id="seed-5",
+                mode="upload",
+                predicted_label="metal",
+                confidence=60.0,
+                all_probabilities="{}",
+                latency_ms=150,
+                image_hash="e" * 64,
+            )
+        )
+        session.commit()
+
+    res = client.get("/api/stats")
+    assert res.status_code == 200
+    matrix = res.json()["confusion_matrix"]
+    assert matrix == [{"predicted": "glass", "corrected": "plastic", "count": 1}]

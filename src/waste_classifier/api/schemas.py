@@ -106,14 +106,39 @@ class FeedbackResponse(BaseModel):
     feedback_label: str
 
 
+class ConfusionCell(BaseModel):
+    predicted: str
+    corrected: str
+    count: int
+
+
+class LatencyPoint(BaseModel):
+    created_at: str = Field(..., description="ISO 8601 timestamp")
+    mode: str
+    latency_ms: int
+
+
 class StatsResponse(BaseModel):
     total_scans: int
     class_distribution: dict[str, int] = Field(
         ..., description="Count of scans per predicted label"
     )
     mean_confidence: float
+    recyclable_pct: float = Field(..., description="% of scans predicted as a recyclable class")
     latency_p50_ms: float
     latency_p95_ms: float
+    confidence_histogram: list[int] = Field(
+        ..., description="Scan counts in 10 buckets of 10 percentage points each, 0-100%"
+    )
+    training_distribution_pct: dict[str, float] = Field(
+        ..., description="Reference: % class share in the TrashNet validation split"
+    )
+    confusion_matrix: list[ConfusionCell] = Field(
+        default_factory=list, description="predicted vs. feedback_label counts, from corrections"
+    )
+    latency_points: list[LatencyPoint] = Field(
+        default_factory=list, description="Most recent scans' latency, for a by-mode trend chart"
+    )
     agent_tool_usage: dict[str, int] = Field(
         ..., description="Count of times each agent tool was called, across all agent-mode chats"
     )

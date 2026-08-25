@@ -1,0 +1,25 @@
+.dashboard-container { max-width: 900px; }
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  text-align: center;
+}
+.hero-stat { display: flex; flex-direction: column; gap: 4px; }
+.hero-val { font-size: 1.75rem; font-weight: 700; color: var(--accent-dark); font-variant-numeric: tabular-nums; }
+.hero-lbl { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+.dash-empty { text-align: center; padding: 3rem 1.5rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.dash-empty i { font-size: 2.5rem; color: var(--muted); }
+.dash-empty p { color: var(--muted); max-width: 32ch; }
+
+#confusionTableWrap { overflow-x: auto; }
+.confusion-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.confusion-table th, .confusion-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.confusion-table .conf-count { font-variant-numeric: tabular-nums; font-weight: 600; }
+.confusion-empty { color: var(--muted); font-size: 0.875rem; }
+
+@media (max-width: 640px) {
+  .hero-val { font-size: 1.4rem; }
+}

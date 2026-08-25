@@ -10,12 +10,13 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from functools import lru_cache
 
 import groq
 import numpy as np
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -29,12 +30,14 @@ from waste_classifier.api.schemas import (
     AgentResponse,
     ChatRequest,
     ChatResponse,
+    ConfusionCell,
     DetectionItem,
     DetectResponse,
     EnvironmentalImpact,
     FeedbackRequest,
     FeedbackResponse,
     HealthResponse,
+    LatencyPoint,
     PredictionResponse,
     StatsResponse,
     ToolCall,
@@ -429,6 +432,24 @@ def chat_stream(request: Request, payload: ChatRequest):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+@lru_cache(maxsize=1)
+def _training_distribution_pct() -> dict[str, float]:
+    """Reference class distribution from the TrashNet validation split the
+    model was scored against (artifacts/metrics/metrics.json), as
+    percentages -- so the dashboard can compare live traffic against it."""
+    try:
+        with open(config.METRICS_DIR / "metrics.json") as f:
+            metrics = json.load(f)
+        per_class = metrics.get("per_class", {})
+        total = sum(v["support"] for v in per_class.values())
+        if not total:
+            return {}
+        return {name: round(v["support"] / total * 100, 2) for name, v in per_class.items()}
+    except Exception:
+        logger.exception("Failed to load training distribution from metrics.json")
+        return {}
+
+
 @app.get("/api/stats", response_model=StatsResponse)
 def stats(session: Session = Depends(get_session)) -> StatsResponse:
     """Aggregate traffic stats, driven entirely by the Scan/ChatTurn rows
@@ -446,6 +467,31 @@ def stats(session: Session = Depends(get_session)) -> StatsResponse:
     latency_p50 = float(np.percentile(latencies, 50)) if latencies else 0.0
     latency_p95 = float(np.percentile(latencies, 95)) if latencies else 0.0
 
+    recyclable_count = sum(1 for s in scans if s.predicted_label in config.RECYCLABLE_CLASSES)
+    recyclable_pct = round(recyclable_count / len(scans) * 100, 2) if scans else 0.0
+
+    confidence_histogram = [0] * 10
+    for s in scans:
+        bucket = min(int(s.confidence // 10), 9)
+        confidence_histogram[bucket] += 1
+
+    confusion_counts: dict[tuple[str, str], int] = {}
+    for s in scans:
+        if not s.feedback_label:
+            continue
+        key = (s.predicted_label, s.feedback_label)
+        confusion_counts[key] = confusion_counts.get(key, 0) + 1
+    confusion_matrix = [
+        ConfusionCell(predicted=pred, corrected=corrected, count=count)
+        for (pred, corrected), count in confusion_counts.items()
+    ]
+
+    recent_scans = session.exec(select(Scan).order_by(Scan.created_at.desc()).limit(200)).all()
+    latency_points = [
+        LatencyPoint(created_at=s.created_at.isoformat(), mode=s.mode, latency_ms=s.latency_ms)
+        for s in recent_scans
+    ]
+
     agent_tool_usage: dict[str, int] = {}
     for turn in agent_turns:
         if not turn.tools_used:
@@ -458,10 +504,20 @@ def stats(session: Session = Depends(get_session)) -> StatsResponse:
         total_scans=len(scans),
         class_distribution=class_distribution,
         mean_confidence=mean_confidence,
+        recyclable_pct=recyclable_pct,
         latency_p50_ms=latency_p50,
         latency_p95_ms=latency_p95,
+        confidence_histogram=confidence_histogram,
+        training_distribution_pct=_training_distribution_pct(),
+        confusion_matrix=confusion_matrix,
+        latency_points=latency_points,
         agent_tool_usage=agent_tool_usage,
     )
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard_page() -> FileResponse:
+    return FileResponse(config.ROOT_DIR / "web" / "dashboard.html")
 
 
 # Serve the static frontend (web/) at the root, after API routes are registered.
