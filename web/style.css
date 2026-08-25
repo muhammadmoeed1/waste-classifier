@@ -12,6 +12,17 @@
   --accent-border: #9fe1cb;
   --danger-bg: #fde8e8;
   --danger-fg: #7a1f1f;
+
+  /* Category colors: constant across light/dark (not redefined in the theme
+     blocks below) since a category's identity color shouldn't shift with
+     the UI chrome. Used for the category legend/probability bars now, and
+     by the Phase 2 dashboard's charts for consistent color-coding. */
+  --cat-cardboard: #b87333;
+  --cat-glass: #3e8ea8;
+  --cat-metal: #7a8794;
+  --cat-paper: #d9a94e;
+  --cat-plastic: #2f9e8f;
+  --cat-trash: #8a6a78;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -243,8 +254,14 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .categories { margin-bottom: 1.5rem; }
 .cats-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
 .cats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.cat-item { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; }
+.cat-item { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; border-top: 3px solid var(--cat-color, var(--border)); }
 .cat-item .ci-icon { font-size: 20px; margin-bottom: 4px; display: block; }
+.cat-item[data-cat="cardboard"] { --cat-color: var(--cat-cardboard); }
+.cat-item[data-cat="glass"] { --cat-color: var(--cat-glass); }
+.cat-item[data-cat="metal"] { --cat-color: var(--cat-metal); }
+.cat-item[data-cat="paper"] { --cat-color: var(--cat-paper); }
+.cat-item[data-cat="plastic"] { --cat-color: var(--cat-plastic); }
+.cat-item[data-cat="trash"] { --cat-color: var(--cat-trash); }
 .cat-item .ci-name { font-size: 12px; color: var(--muted); }
 .cat-item.active { border-color: var(--accent); background: var(--accent-light); }
 .cat-item.active .ci-name { color: var(--accent-dark); font-weight: 500; }
