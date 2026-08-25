@@ -18,6 +18,14 @@ data/app.db
 # Large training history not needed for the repo
 artifacts/metrics/training_history.json
 
+# Model weights (~37MB) -- published as a GitHub Release asset instead
+# (see scripts/fetch_artifacts.py) so future commits don't keep bloating the
+# repo with binaries. class_names.json stays tracked (tiny, useful to browse
+# on GitHub); the .onnx files are regenerable via ml/export_onnx.py.
+artifacts/waste_model.keras
+artifacts/waste_model.onnx
+artifacts/waste_model_quant.onnx
+
 # Pretrained YOLOv8n weights (auto-downloaded by ultralytics on first use;
 # re-fetchable from https://github.com/ultralytics/assets, not our own artifact)
 yolov8n.pt

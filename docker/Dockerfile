@@ -28,9 +28,12 @@ RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 COPY src/ src/
 COPY web/ web/
 COPY data/knowledge_base/ data/knowledge_base/
-COPY artifacts/waste_model.keras artifacts/waste_model.keras
-COPY artifacts/class_names.json artifacts/class_names.json
+COPY scripts/fetch_artifacts.py scripts/fetch_artifacts.py
 COPY pyproject.toml .
+
+# Model weights are published as a GitHub Release asset (see
+# scripts/fetch_artifacts.py), not committed to git, to keep the repo small.
+RUN python scripts/fetch_artifacts.py
 
 ENV PYTHONPATH=/app/src
 EXPOSE 7860
