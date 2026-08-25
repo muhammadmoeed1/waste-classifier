@@ -130,17 +130,22 @@ def predict(
     # TensorFlow/OpenCV work, and FastAPI only threadpool-offloads sync
     # handlers. An async def here would run this on the event loop directly
     # and block every other concurrent request (including /health).
-    if not classifier.is_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
-        )
-
+    #
+    # Input validation runs before the model-readiness check: a malformed or
+    # oversized request is wrong regardless of server state and should always
+    # get a 4xx, not have that masked by a 503 if the model happens not to be
+    # loaded.
     start = time.perf_counter()
     validation.reject_oversized_content_length(request)
     validation.validate_image_content_type(image.content_type)
     contents = validation.read_upload_bounded(image)
     img = validation.open_and_verify_image(contents)
+
+    if not classifier.is_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
+        )
 
     result = classifier.predict(img)
 
@@ -262,17 +267,18 @@ def detect(
 ) -> DetectResponse:
     # Sync `def` for the same reason as /api/predict — YOLO/OpenCV/TensorFlow
     # work below is CPU-bound and must not run directly on the event loop.
-    if not classifier.is_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
-        )
-
+    # Input validation runs before the model-readiness check; see /api/predict.
     start = time.perf_counter()
     validation.reject_oversized_content_length(request)
     validation.validate_image_content_type(image.content_type)
     contents = validation.read_upload_bounded(image)
     img = validation.open_and_verify_image(contents)
+
+    if not classifier.is_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
+        )
 
     detections = detect_and_classify(img, classifier)
     annotated = draw_detections(img, detections)
