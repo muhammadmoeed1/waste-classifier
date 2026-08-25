@@ -1,0 +1,2 @@
+export const UNCERTAINTY_THRESHOLD = 60;
+export const CAMERA_INTERVAL_MS = 2000;

@@ -1,9 +1,8 @@
-const CACHE_NAME = 'waste-classifier-v4';
+const CACHE_NAME = 'waste-classifier-v5';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/style.css',
-  '/app.js',
   '/manifest.json',
   '/favicon.svg',
   '/icons/icon-192.png',
@@ -13,6 +12,20 @@ const APP_SHELL = [
   '/vendor/fontawesome/webfonts/fa-solid-900.woff2',
   '/vendor/fonts/noto-nastaliq-urdu.css',
   '/vendor/fonts/noto-nastaliq-urdu.woff2',
+  '/src/main.js',
+  '/src/state.js',
+  '/src/constants.js',
+  '/src/i18n.js',
+  '/src/theme.js',
+  '/src/pwa.js',
+  '/src/api/client.js',
+  '/src/ui/markdown.js',
+  '/src/ui/dragdrop.js',
+  '/src/modes/upload.js',
+  '/src/modes/camera.js',
+  '/src/modes/multi.js',
+  '/src/chat/chat.js',
+  '/src/chat/voice.js',
 ];
 
 self.addEventListener('install', (event) => {
