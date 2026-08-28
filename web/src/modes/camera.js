@@ -29,9 +29,23 @@ async function startCamera() {
 
     cameraLoopId = setInterval(captureAndClassifyFrame, CAMERA_INTERVAL_MS);
   } catch (err) {
-    cameraErrorMsg.textContent = 'Could not access your camera: ' + (err.message || err);
+    cameraErrorMsg.innerHTML = cameraErrorHtml(err);
     cameraErrorMsg.style.display = 'block';
   }
+}
+
+function cameraErrorHtml(err) {
+  if (err && err.name === 'NotAllowedError') {
+    return (
+      'Camera access was denied, so live classification can\'t run. This app needs it to classify what the camera sees in real time -- ' +
+      'it never uploads or stores video, only single frames sent for classification. To re-enable it, look for a camera icon in your ' +
+      'browser\'s address bar (or Settings &rarr; Site settings &rarr; Camera) and allow access for this site, then tap "Start camera" again.'
+    );
+  }
+  if (err && err.name === 'NotFoundError') {
+    return 'No camera was found on this device. Try Upload Photo instead.';
+  }
+  return 'Could not access your camera: ' + ((err && err.message) || err);
 }
 
 export function stopCamera() {

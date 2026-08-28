@@ -7,6 +7,7 @@ const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const chatSend = document.getElementById('chatSend');
 const agentModeToggle = document.getElementById('agentModeToggle');
+const chatSuggestions = document.getElementById('chatSuggestions');
 
 export function addUserMessage(text) {
   const div = document.createElement('div');
@@ -20,7 +21,7 @@ export function addUserMessage(text) {
 export function addAssistantMessage(text) {
   const div = document.createElement('div');
   div.className = 'chat-msg assistant';
-  div.innerHTML = `<div class="bubble">${renderMarkdownLite(text)}</div>`;
+  div.innerHTML = `<div class="bubble" role="status">${renderMarkdownLite(text)}</div>`;
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return div.querySelector('.bubble');
@@ -71,10 +72,11 @@ async function sendChatStreamMode(question, bubble) {
   }
 }
 
-async function sendChat() {
-  const question = chatInput.value.trim();
+async function sendChat(presetQuestion) {
+  const question = (presetQuestion ?? chatInput.value).trim();
   if (!question) return;
 
+  chatSuggestions.style.display = 'none';
   addUserMessage(question);
   chatInput.value = '';
   chatSend.disabled = true;
@@ -96,7 +98,11 @@ async function sendChat() {
   }
 }
 
-chatSend.addEventListener('click', sendChat);
+chatSend.addEventListener('click', () => sendChat());
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendChat();
+});
+chatSuggestions.addEventListener('click', (e) => {
+  const chip = e.target.closest('.suggestion-chip');
+  if (chip) sendChat(chip.textContent);
 });

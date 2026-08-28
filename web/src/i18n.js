@@ -34,6 +34,9 @@ export const translations = {
     chatSub: 'Powered by Groq &middot; ask about recycling rules, contamination, or your uploaded item',
     chatWelcome: 'Hi! Upload an image or just ask me a recycling question &mdash; e.g. "Can I recycle a greasy pizza box?"',
     chatPlaceholder: 'Ask about recycling...',
+    suggestion1: 'Can I recycle a greasy pizza box?',
+    suggestion2: "What items can't be recycled at all?",
+    suggestion3: 'How should I prep items before recycling?',
     agentModeLabel: '🤖 Agent',
     toolNames: {
       lookup_recycling_guide: 'looked up recycling guide',
@@ -82,6 +85,9 @@ export const translations = {
     chatSub: 'Groq کی طاقت سے · ری سائیکلنگ کے اصولوں، آلودگی، یا اپ لوڈ کردہ چیز کے بارے میں پوچھیں',
     chatWelcome: 'السلام علیکم! تصویر اپ لوڈ کریں یا مجھ سے کوئی سوال پوچھیں — مثلاً "کیا میں تیل والا پیزا باکس ری سائیکل کر سکتا ہوں؟"',
     chatPlaceholder: 'ری سائیکلنگ کے بارے میں پوچھیں...',
+    suggestion1: 'کیا میں تیل والا پیزا باکس ری سائیکل کر سکتا ہوں؟',
+    suggestion2: 'کون سی چیزیں بالکل ری سائیکل نہیں ہو سکتیں؟',
+    suggestion3: 'ری سائیکلنگ سے پہلے اشیاء کو کیسے تیار کروں؟',
     agentModeLabel: '🤖 ایجنٹ',
     toolNames: {
       lookup_recycling_guide: 'ری سائیکلنگ گائیڈ دیکھی',

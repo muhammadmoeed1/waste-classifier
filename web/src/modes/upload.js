@@ -121,6 +121,10 @@ function showResult(data) {
   state.lastScanId = data.scan_id ?? null;
   resetFeedbackUI();
 
+  // Subtle haptic confirmation on devices that support it (mobile browsers);
+  // a no-op everywhere else.
+  if (navigator.vibrate) navigator.vibrate(10);
+
   resultLabel.textContent = catLabel(data.label);
   resultBadge.className = 'badge ' + (data.recyclable ? 'badge-rec' : 'badge-norec');
   resultBadge.innerHTML = data.recyclable

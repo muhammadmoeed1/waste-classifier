@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart Waste Classifier</title>
+  <meta name="description" content="Classify waste with a fine-tuned MobileNetV2 vision model, see a Grad-CAM heatmap of what it looked at, detect multiple items in one photo, and ask a Groq-powered recycling assistant follow-up questions by text or voice.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Smart Waste Classifier">
+  <meta property="og:description" content="AI-powered waste classification with explainability (Grad-CAM), multi-item detection, and a bilingual recycling assistant.">
+  <meta property="og:image" content="/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1d9e75">
@@ -20,7 +26,7 @@
   <div class="top-controls">
     <a href="/dashboard" class="icon-toggle" title="Dashboard"><i class="fas fa-chart-simple"></i></a>
     <button id="langToggle" class="icon-toggle" title="اردو / English">اردو</button>
-    <button id="themeToggle" class="icon-toggle" title="Toggle dark mode">
+    <button id="themeToggle" class="icon-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
       <i class="fas fa-moon"></i>
     </button>
   </div>
@@ -66,9 +72,9 @@
         </button>
       </div>
 
-      <p class="error" id="errorMsg" style="display:none;"></p>
+      <p class="error" id="errorMsg" role="alert" style="display:none;"></p>
 
-      <div class="result-section" id="resultSection" style="display:none;">
+      <div class="result-section" id="resultSection" role="region" aria-live="polite" aria-label="Classification result" style="display:none;">
         <hr>
         <div class="result-top">
           <div class="result-label" id="resultLabel"></div>
@@ -205,12 +211,17 @@
       <div class="chat-msg assistant">
         <div class="bubble" id="chatWelcomeMsg" data-i18n="chatWelcome">Hi! Upload an image or just ask me a recycling question &mdash; e.g. "Can I recycle a greasy pizza box?"</div>
       </div>
+      <div class="chat-suggestions" id="chatSuggestions">
+        <button type="button" class="suggestion-chip" data-i18n="suggestion1">Can I recycle a greasy pizza box?</button>
+        <button type="button" class="suggestion-chip" data-i18n="suggestion2">What items can't be recycled at all?</button>
+        <button type="button" class="suggestion-chip" data-i18n="suggestion3">How should I prep items before recycling?</button>
+      </div>
     </div>
 
     <div class="chat-input-row">
       <input type="text" id="chatInput" placeholder="Ask about recycling..." data-i18n-placeholder="chatPlaceholder" />
-      <button id="micBtn" class="btn-clear mic-btn" title="Ask by voice"><i class="fas fa-microphone"></i></button>
-      <button id="chatSend" class="btn chat-send"><i class="fas fa-paper-plane"></i></button>
+      <button id="micBtn" class="btn-clear mic-btn" title="Ask by voice" aria-label="Ask by voice"><i class="fas fa-microphone"></i></button>
+      <button id="chatSend" class="btn chat-send" aria-label="Send message"><i class="fas fa-paper-plane"></i></button>
     </div>
   </div>
 
