@@ -32,9 +32,24 @@ METRICS_DIR = Path(os.getenv("METRICS_DIR", ROOT_DIR / "artifacts" / "metrics"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
+# --- Region ---
+# "generic" (default): assumes Western-style kerbside recycling infrastructure.
+# "pk": Pakistan — swaps in a knowledge base/system prompt tuned for the informal
+# kabaria/scrap-dealer resale economy that actually exists locally, where most
+# municipal kerbside recycling does not. Default is "generic" so existing
+# deployments are unaffected unless this is explicitly opted into.
+REGION = os.getenv("REGION", "generic").lower()
+
+
+def _default_knowledge_base_dir(region: str) -> Path:
+    if region == "pk":
+        return ROOT_DIR / "data" / "knowledge_base" / "pk"
+    return ROOT_DIR / "data" / "knowledge_base"
+
+
 # --- RAG ---
 KNOWLEDGE_BASE_DIR = Path(
-    os.getenv("KNOWLEDGE_BASE_DIR", ROOT_DIR / "data" / "knowledge_base")
+    os.getenv("KNOWLEDGE_BASE_DIR", _default_knowledge_base_dir(REGION))
 )
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 
