@@ -65,10 +65,42 @@ def check_recyclability(material: str) -> dict:
     return {"material": material, "recyclable": material in RECYCLABLE_CLASSES}
 
 
+def estimate_resale_value(material: str, weight_kg: float) -> dict:
+    """Estimate approximate PKR resale value for `weight_kg` of `material` via a
+    local Pakistani scrap dealer ("kabaria"). See ml/impact.py for the illustrative
+    per-kg rates and their disclaimer — these are rough ballparks, not real quotes."""
+    material = (material or "").lower().strip()
+    fact = get_impact(material)
+    if fact is None:
+        return {"error": f"Unknown material '{material}'. Valid: {', '.join(VALID_MATERIALS)}."}
+
+    try:
+        weight = float(weight_kg)
+    except (TypeError, ValueError):
+        return {"error": "weight_kg must be a number (kilograms)."}
+
+    if fact.resale_pkr_per_kg is None:
+        return {
+            "material": material,
+            "weight_kg": round(weight, 3),
+            "resale_value_pkr": None,
+            "note": fact.resale_note or "No typical local resale market for this material.",
+        }
+
+    return {
+        "material": material,
+        "weight_kg": round(weight, 3),
+        "resale_value_pkr": round(fact.resale_pkr_per_kg * weight, 2),
+        "rate_pkr_per_kg": fact.resale_pkr_per_kg,
+        "note": fact.resale_note,
+    }
+
+
 TOOL_REGISTRY = {
     "lookup_recycling_guide": lookup_recycling_guide,
     "estimate_environmental_impact": estimate_environmental_impact,
     "check_recyclability": check_recyclability,
+    "estimate_resale_value": estimate_resale_value,
 }
 
 TOOL_SCHEMAS = [
@@ -138,6 +170,34 @@ TOOL_SCHEMAS = [
                     }
                 },
                 "required": ["material"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "estimate_resale_value",
+            "description": (
+                "Estimate the approximate resale value, in Pakistani Rupees (PKR), of "
+                "selling a given weight (in kilograms) of a material to a local scrap "
+                "dealer ('kabaria') in Pakistan's informal recycling economy. Call this "
+                "when the user asks how much scrap material is worth, what a kabaria "
+                "would pay, or similar local resale questions."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "material": {
+                        "type": "string",
+                        "enum": VALID_MATERIALS,
+                        "description": "The waste material.",
+                    },
+                    "weight_kg": {
+                        "type": "number",
+                        "description": "Weight in kg. Assume 0.05 if the user doesn't specify.",
+                    },
+                },
+                "required": ["material", "weight_kg"],
             },
         },
     },

@@ -18,6 +18,24 @@ Never invent local regulations — recommend checking the user's local waste aut
 for anything jurisdiction-specific.
 """
 
+# config.REGION == "pk": most of Pakistan has no municipal kerbside recycling —
+# what exists instead is an informal scrap-dealer ("kabaria") resale economy. This
+# addendum steers the assistant away from assuming Western-style recycling bins.
+SYSTEM_PROMPT_PK_ADDENDUM = """
+
+Region note: the user is most likely in Pakistan. Assume there is no municipal \
+kerbside recycling unless the user says otherwise — what actually exists locally is \
+an informal scrap-dealer ("kabaria") resale economy. Some materials (metal, \
+cardboard, paper, clean PET plastic bottles) can usually be sold by weight to a \
+kabaria or scrap shop; others (most glass, "trash"-category items) typically have no \
+local recovery path and go to general waste. Mention approximate resale value when \
+useful, and make clear that any rates are rough ballparks that vary by dealer and \
+city, not fixed prices.
+"""
+
+if config.REGION == "pk":
+    SYSTEM_PROMPT += SYSTEM_PROMPT_PK_ADDENDUM
+
 
 def _build_context_block(question: str) -> str:
     if not retriever.is_ready:

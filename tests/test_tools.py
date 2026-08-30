@@ -3,6 +3,7 @@ from waste_classifier.genai.tools import (
     TOOL_SCHEMAS,
     check_recyclability,
     estimate_environmental_impact,
+    estimate_resale_value,
     execute_tool,
     lookup_recycling_guide,
 )
@@ -38,6 +39,28 @@ def test_estimate_environmental_impact_rejects_bad_weight():
 def test_check_recyclability_true_and_false_cases():
     assert check_recyclability("glass")["recyclable"] is True
     assert check_recyclability("trash")["recyclable"] is False
+
+
+def test_estimate_resale_value_computes_expected_pkr():
+    result = estimate_resale_value("metal", 2)
+    assert result["resale_value_pkr"] == 300.0  # 150.0 PKR/kg * 2kg, matches impact.py
+    assert result["rate_pkr_per_kg"] == 150.0
+
+
+def test_estimate_resale_value_handles_glass_with_no_local_market():
+    result = estimate_resale_value("glass", 1)
+    assert result["resale_value_pkr"] is None
+    assert "note" in result
+
+
+def test_estimate_resale_value_rejects_bad_weight():
+    result = estimate_resale_value("metal", "not-a-number")
+    assert "error" in result
+
+
+def test_estimate_resale_value_errors_on_unknown_material():
+    result = estimate_resale_value("banana", 1)
+    assert "error" in result
 
 
 def test_execute_tool_dispatches_by_name_with_json_string_args():

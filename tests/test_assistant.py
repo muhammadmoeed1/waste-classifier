@@ -1,3 +1,5 @@
+import importlib
+
 from waste_classifier.genai.assistant import _build_messages
 
 
@@ -28,3 +30,21 @@ def test_build_messages_includes_history_and_question_in_order():
     assert messages[1] == history[0]
     assert messages[2] == history[1]
     assert messages[-1] == {"role": "user", "content": "follow up question"}
+
+
+def test_region_pk_adds_kabaria_addendum_to_system_prompt(monkeypatch):
+    """REGION=pk should swap in the kabaria/scrap-dealer system prompt addendum
+    (see config.REGION); REGION=generic (the default) must not mention it."""
+    from waste_classifier import config
+    from waste_classifier.genai import assistant
+
+    monkeypatch.setenv("REGION", "pk")
+    importlib.reload(config)
+    importlib.reload(assistant)
+    try:
+        assert "kabaria" in assistant.SYSTEM_PROMPT.lower()
+    finally:
+        monkeypatch.delenv("REGION", raising=False)
+        importlib.reload(config)
+        importlib.reload(assistant)
+        assert "kabaria" not in assistant.SYSTEM_PROMPT.lower()
