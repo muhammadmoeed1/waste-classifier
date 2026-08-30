@@ -24,6 +24,7 @@ COPY src/ src/
 COPY web/ web/
 COPY data/knowledge_base/ data/knowledge_base/
 COPY scripts/fetch_artifacts.py scripts/fetch_artifacts.py
+COPY artifacts/metrics/ artifacts/metrics/
 COPY pyproject.toml .
 
 # Model weights are published as a GitHub Release asset (see

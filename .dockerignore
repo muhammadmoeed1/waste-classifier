@@ -10,6 +10,12 @@ __pycache__/
 data/dataset/
 data/app.db
 artifacts/
+# Un-ignore artifacts/metrics/ specifically: it's small (~360KB) and
+# metrics.json is read at runtime by /api/models and the dashboard's
+# "live traffic vs. training distribution" chart -- the model weights
+# themselves stay excluded (fetched from a GitHub Release instead).
+!artifacts/metrics/
+!artifacts/metrics/**
 tests/
 *.md
 .dockerignore
