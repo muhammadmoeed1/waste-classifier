@@ -70,6 +70,7 @@
 
     <div class="card">
       <div class="section-label"><i class="fas fa-clock"></i> Latency by mode, most recent scans</div>
+      <p class="gradcam-hint">Upload mode runs the Keras model (needed for Grad-CAM); camera and multi-item modes use the faster ONNX export when available -- this is where that difference shows up in real traffic.</p>
       <canvas id="latencyChart" height="220"></canvas>
     </div>
 

@@ -78,7 +78,9 @@ async function captureAndClassifyFrame() {
     if (!blob) return;
 
     const data = await predictImage(blob, { includeGradcam: false, mode: 'camera', filename: 'frame.jpg' });
-    const uncertain = data.confidence < UNCERTAINTY_THRESHOLD;
+    // Any of the three signals -- OOD, ambiguous top-2, or plain low confidence
+    // -- gets the same compact "(uncertain)" tag in this space-constrained live view.
+    const uncertain = data.is_out_of_distribution || data.is_ambiguous || data.confidence < UNCERTAINTY_THRESHOLD;
     cameraLiveLabel.textContent = catLabel(data.label) + (uncertain ? ` ${t('uncertainTag')}` : '');
     cameraLiveConf.textContent = data.confidence + '%';
     cameraLiveBadge.style.display = 'flex';

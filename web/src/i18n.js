@@ -50,8 +50,13 @@ export const translations = {
     uncertainPrefix: 'Not fully sure — this might also be',
     uncertainSuffix: '. Try a clearer or closer photo for a more confident result.',
     uncertainTag: '(uncertain)',
+    oodWarningText: "This doesn't look like any of the six known categories. The label below is the model's best guess, but treat it with caution.",
     classifiedMsg: (label, conf) =>
       `I classified this as **${label}** (${conf}% confidence). Ask me anything about how to recycle it!`,
+    oodClarifyMsg:
+      "This doesn't clearly match any of the six categories I know (cardboard, glass, metal, paper, plastic, trash). Can you describe it — what is it, and what's it made of?",
+    ambiguousClarifyMsg: (label, runnerUp) =>
+      `I'm genuinely torn between **${label}** and **${runnerUp}** for this one. Can you tell me more about it — what it feels like, or what it's made of?`,
   },
   ur: {
     tagline: 'تصویر اپ لوڈ کریں تاکہ اس کی کچرے کی قسم معلوم ہو، پھر AI اسسٹنٹ سے<br>ری سائیکلنگ کے بارے میں کچھ بھی پوچھیں۔',
@@ -102,8 +107,13 @@ export const translations = {
     uncertainPrefix: 'پورا یقین نہیں — یہ',
     uncertainSuffix: 'بھی ہو سکتا ہے۔ زیادہ واضح یا قریبی تصویر آزمائیں۔',
     uncertainTag: '(غیر یقینی)',
+    oodWarningText: 'یہ چھ معلوم اقسام میں سے کسی سے مماثل نہیں لگتی۔ نیچے دیا گیا لیبل ماڈل کا بہترین اندازہ ہے، لیکن احتیاط سے لیں۔',
     classifiedMsg: (label, conf) =>
       `میں نے اسے **${label}** کے طور پر شناخت کیا (${conf}% اعتماد)۔ اسے ری سائیکل کرنے کے بارے میں کچھ بھی پوچھیں!`,
+    oodClarifyMsg:
+      'یہ میری معلوم چھ اقسام (کارڈ بورڈ، شیشہ، دھات، کاغذ، پلاسٹک، کچرا) میں سے کسی سے واضح طور پر مماثل نہیں۔ کیا آپ بتا سکتے ہیں یہ کیا ہے اور کس چیز سے بنی ہے؟',
+    ambiguousClarifyMsg: (label, runnerUp) =>
+      `مجھے **${label}** اور **${runnerUp}** کے درمیان واقعی تذبذب ہے۔ کیا آپ اس کے بارے میں مزید بتا سکتے ہیں — یہ چھونے میں کیسی لگتی ہے یا کس چیز سے بنی ہے؟`,
   },
 };
 

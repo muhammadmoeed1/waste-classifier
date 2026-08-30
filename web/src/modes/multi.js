@@ -60,7 +60,7 @@ multiDetectBtn.addEventListener('click', async () => {
     for (const det of data.detections) {
       const row = document.createElement('div');
       row.className = 'multi-item-row';
-      const uncertain = det.confidence < UNCERTAINTY_THRESHOLD;
+      const uncertain = det.is_out_of_distribution || det.is_ambiguous || det.confidence < UNCERTAINTY_THRESHOLD;
       row.innerHTML = `
         <span class="mi-label">${catLabel(det.label)}${uncertain ? ` <span class="mi-uncertain">${t('uncertainTag')}</span>` : ''}</span>
         <span class="badge ${det.recyclable ? 'badge-rec' : 'badge-norec'}">

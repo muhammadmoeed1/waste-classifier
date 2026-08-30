@@ -34,6 +34,14 @@ class PredictionResponse(BaseModel):
     scan_id: int | None = Field(
         None, description="Persisted Scan row id, used to submit feedback on this prediction"
     )
+    is_out_of_distribution: bool = Field(
+        False, description="Softmax entropy suggests this isn't clearly one of the 6 known classes"
+    )
+    is_ambiguous: bool = Field(
+        False, description="Top-2 margin is small -- consider showing the runner-up alongside label"
+    )
+    runner_up_label: str | None = Field(None, description="Second-place class, when is_ambiguous")
+    runner_up_confidence: float | None = Field(None, description="Runner-up's confidence, as a %")
 
 
 class ChatMessage(BaseModel):
@@ -83,6 +91,8 @@ class DetectionItem(BaseModel):
     label: str
     confidence: float
     recyclable: bool
+    is_out_of_distribution: bool = False
+    is_ambiguous: bool = False
 
 
 class DetectResponse(BaseModel):
@@ -93,6 +103,9 @@ class DetectResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
+    onnx_model_loaded: bool = Field(
+        False, description="Faster ONNX path for camera/multi-item modes; Keras is the fallback"
+    )
     retriever_ready: bool
     groq_configured: bool
 

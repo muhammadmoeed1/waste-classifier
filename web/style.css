@@ -181,6 +181,16 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 :root[data-theme="dark"] .uncertainty-warning { background: #3a2f0a; border-color: #6b5a1a; color: #f0d878; }
 .uncertainty-warning i { margin-top: 2px; flex-shrink: 0; }
 
+/* More assertive than the (amber) uncertainty warning above: the model has
+   no real opinion here (near-uniform softmax across all 6 classes), not just
+   a close call between two of them. */
+.ood-warning {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 1rem;
+  padding: 10px 12px; background: var(--danger-bg); border: 1px solid var(--danger-fg);
+  border-radius: 8px; font-size: 13px; color: var(--danger-fg); line-height: 1.5;
+}
+.ood-warning i { margin-top: 2px; flex-shrink: 0; }
+
 .conf-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
 .conf-label { font-size: 13px; color: var(--muted); }
 .conf-val { font-size: 13px; font-weight: 500; }

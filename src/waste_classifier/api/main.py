@@ -53,16 +53,27 @@ from waste_classifier.db.session import get_session, init_db, safe_write, write_
 from waste_classifier.genai import agent as agent_module
 from waste_classifier.genai import assistant
 from waste_classifier.genai.groq_client import get_client
+from waste_classifier.ml import confidence as confidence_module
 from waste_classifier.ml import impact as impact_module
 from waste_classifier.ml.classifier import classifier
 from waste_classifier.ml.detect import detect_and_classify, draw_detections
 from waste_classifier.ml.explain import generate_gradcam
+from waste_classifier.ml.onnx_classifier import onnx_classifier
 from waste_classifier.rag import retriever
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _fast_classifier():
+    """The classifier used for camera and multi-item modes, where Grad-CAM
+    isn't shown anyway and per-request latency matters more: ONNX Runtime
+    when its export is available (~12.75x faster per
+    artifacts/metrics/onnx_benchmark.json), falling back to the same Keras
+    classifier the upload flow uses otherwise."""
+    return onnx_classifier if onnx_classifier.is_ready else classifier
 
 
 def _warmup_classifier() -> None:
@@ -88,6 +99,11 @@ async def lifespan(app: FastAPI):
         classifier.load()
     except Exception:
         logger.exception("Failed to load classifier model")
+
+    try:
+        onnx_classifier.load()
+    except Exception:
+        logger.exception("Failed to load ONNX classifier (optional; falls back to Keras)")
 
     _warmup_classifier()
 
@@ -121,6 +137,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         model_loaded=classifier.is_ready,
+        onnx_model_loaded=onnx_classifier.is_ready,
         retriever_ready=retriever.is_ready,
         groq_configured=bool(config.GROQ_API_KEY),
     )
@@ -155,18 +172,27 @@ def predict(
             detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
         )
 
-    result = classifier.predict(img)
+    # Upload mode always uses the Keras model (Grad-CAM needs real gradient-tape
+    # access, which ONNX Runtime's inference-only session can't provide). Camera
+    # mode uses the faster ONNX export when available -- see _fast_classifier().
+    active_classifier = classifier if mode == "upload" else _fast_classifier()
+    result = active_classifier.predict(img)
 
     # Grad-CAM adds a gradient pass; skip it for continuous live-camera capture
     # (called every ~2s) where responsiveness matters more than the heatmap, and
     # skip it unconditionally on the lightweight deployment profile where the
     # extra memory would risk exceeding the host's RAM limit.
     gradcam_image = None
-    if include_gradcam and not config.DISABLE_GRADCAM:
+    if include_gradcam and not config.DISABLE_GRADCAM and active_classifier is classifier:
         try:
             gradcam_image = generate_gradcam(classifier.model, img, pred_index=result.label_index)
         except Exception:
             logger.exception("Grad-CAM generation failed; returning prediction without it")
+
+    is_ood = confidence_module.is_out_of_distribution(result.probabilities)
+    margin, runner_up_label, runner_up_confidence = confidence_module.top2_margin_and_runnerup(
+        result.probabilities
+    )
 
     fact = impact_module.get_impact(result.label)
     impact_response = (
@@ -204,6 +230,10 @@ def predict(
         gradcam_image=gradcam_image,
         impact=impact_response,
         scan_id=scan_id,
+        is_out_of_distribution=is_ood,
+        is_ambiguous=margin < confidence_module.TOP2_MARGIN_THRESHOLD,
+        runner_up_label=runner_up_label,
+        runner_up_confidence=runner_up_confidence if runner_up_label else None,
     )
 
 
@@ -288,7 +318,9 @@ def detect(
             detail="Model is not loaded. Run training first (python -m waste_classifier.ml.train).",
         )
 
-    detections = detect_and_classify(img, classifier)
+    # Multi-item mode uses the faster ONNX export when available -- see
+    # _fast_classifier(); Grad-CAM isn't shown for individual crops anyway.
+    detections = detect_and_classify(img, _fast_classifier())
     annotated = draw_detections(img, detections)
 
     buf = io.BytesIO()
@@ -322,6 +354,8 @@ def detect(
                 label=d.label,
                 confidence=d.confidence,
                 recyclable=d.recyclable,
+                is_out_of_distribution=d.is_out_of_distribution,
+                is_ambiguous=d.is_ambiguous,
             )
             for d in detections
         ],

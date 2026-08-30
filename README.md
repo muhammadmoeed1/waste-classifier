@@ -88,8 +88,9 @@ of the connection just dropping silently.
 | Layer               | Technology                                                        |
 |---------------------|--------------------------------------------------------------------|
 | Computer vision     | TensorFlow / Keras, MobileNetV2 transfer learning + fine-tuning, class-weighted + best-epoch training |
-| Model optimization   | ONNX Runtime export + dynamic int8 quantization, benchmarked against the Keras baseline |
+| Model optimization   | ONNX Runtime export + dynamic int8 quantization; ONNX serves Camera/Multi-Item modes in production (~12.75x faster), Keras serves Upload mode for Grad-CAM |
 | Explainable AI       | Grad-CAM (gradient-based class activation mapping), implemented from scratch with `tf.GradientTape` |
+| Confidence routing   | Entropy-based OOD detection + top-2 margin ambiguity check, thresholds tuned against the real validation set |
 | Multi-item detection | Pretrained YOLOv8n (ultralytics) + OpenCV contour proposals, unioned and resolved via confidence-based suppression |
 | Backend API         | FastAPI, Pydantic, Uvicorn                                          |
 | Generative AI       | Groq API (`openai/gpt-oss-120b`) — streaming chat, **tool-calling agent**, + Whisper speech-to-text |
@@ -165,11 +166,40 @@ int8 ops, so dynamic quantization adds dequantization overhead without a
 matching speed win. Its **91% size reduction** is still valuable for
 bandwidth/storage-constrained edge deployment, just not for raw CPU latency on
 this hardware — the right format depends on what you're actually optimizing
-for. `src/waste_classifier/ml/onnx_classifier.py` provides a drop-in
-`OnnxWasteClassifier` with the same interface as the Keras classifier for
-anyone who wants the ONNX path in production (not wired in as the default,
-since Grad-CAM needs real gradient-tape access that ONNX Runtime's
-inference-only graph doesn't expose).
+for.
+
+`src/waste_classifier/ml/onnx_classifier.py`'s `OnnxWasteClassifier` (same
+interface as the Keras classifier) **is wired into production**: Live Camera
+and Multi-Item modes use it for the ~12.75x latency win, falling back to Keras
+automatically if the `.onnx` export isn't present. Upload mode always uses
+Keras, since Grad-CAM needs real gradient-tape access that ONNX Runtime's
+inference-only graph doesn't expose. The live latency split between modes is
+visible on `/dashboard`.
+
+## Confidence-aware routing & out-of-distribution detection
+
+The model only knows six classes and, like any softmax classifier, will
+assign a confident-looking label to something it's never seen (a phone, a
+shoe) rather than saying "I don't know." Two signals address this, both
+computed in `src/waste_classifier/ml/confidence.py` and empirically tuned
+against the real validation split (`scripts/tune_ood_threshold.py`) rather
+than guessed:
+
+- **Top-2 margin.** If the top two softmax scores are within 15 percentage
+  points, both candidates are surfaced instead of a single confident label —
+  this measurably matters: at that margin, accuracy on the validation set is
+  40% vs. 86% above it. Directly targets the documented glass↔plastic confusion.
+- **Entropy-based OOD gate.** Near-uniform softmax output (high Shannon
+  entropy) surfaces a "this doesn't look like any of the six known
+  categories" warning. This is a real but limited heuristic — a model can
+  also be *confidently wrong* on an out-of-distribution input, which entropy
+  alone won't catch (verified: feeding this model pure random noise doesn't
+  reliably trigger it either). The threshold is set conservatively (99th
+  percentile of real in-distribution entropy) to minimize false positives on
+  genuine photos, at the cost of missing some true OOD cases.
+
+On either signal, the chat assistant proactively asks a clarifying question
+instead of just stating an uncertain label.
 
 ## Model performance
 

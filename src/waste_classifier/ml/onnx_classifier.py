@@ -77,3 +77,11 @@ class OnnxWasteClassifier:
             recyclable=label in config.RECYCLABLE_CLASSES,
             probabilities=probabilities,
         )
+
+
+# Module-level singleton, matching classifier.py's pattern. Used for camera
+# and multi-item modes (see api/main.py) where Grad-CAM isn't shown anyway and
+# the ~12.75x latency win matters more; falls back to the Keras classifier
+# when the .onnx file isn't present (e.g. a fresh checkout before
+# `python -m waste_classifier.ml.export_onnx` has been run).
+onnx_classifier = OnnxWasteClassifier()

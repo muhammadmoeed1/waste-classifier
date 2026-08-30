@@ -3,7 +3,6 @@ import { t, catLabel } from '../i18n.js';
 import { predictImage, submitFeedback } from '../api/client.js';
 import { addAssistantMessage } from '../chat/chat.js';
 import { setupDragAndDrop } from '../ui/dragdrop.js';
-import { UNCERTAINTY_THRESHOLD } from '../constants.js';
 
 const fileInput = document.getElementById('fileInput');
 const uploadZone = document.getElementById('uploadZone');
@@ -17,6 +16,7 @@ const errorMsg = document.getElementById('errorMsg');
 const resultSection = document.getElementById('resultSection');
 const resultLabel = document.getElementById('resultLabel');
 const resultBadge = document.getElementById('resultBadge');
+const oodWarning = document.getElementById('oodWarning');
 const uncertaintyWarning = document.getElementById('uncertaintyWarning');
 const uncertaintyText = document.getElementById('uncertaintyText');
 const confVal = document.getElementById('confVal');
@@ -150,9 +150,13 @@ function showResult(data) {
     probsList.appendChild(row);
   }
 
-  if (data.confidence < UNCERTAINTY_THRESHOLD && sorted.length > 1) {
-    const runnerUp = sorted[1][0];
-    uncertaintyText.textContent = `${t('uncertainPrefix')} ${catLabel(runnerUp)}${t('uncertainSuffix')}`;
+  oodWarning.style.display = data.is_out_of_distribution ? 'flex' : 'none';
+
+  // is_ambiguous (top-2 softmax margin < 15 points) is a server-computed,
+  // empirically-validated signal -- see ml/confidence.py -- rather than the
+  // simpler confidence<60% heuristic this used to check client-side.
+  if (data.is_ambiguous && data.runner_up_label) {
+    uncertaintyText.textContent = `${t('uncertainPrefix')} ${catLabel(data.runner_up_label)}${t('uncertainSuffix')}`;
     uncertaintyWarning.style.display = 'flex';
   } else {
     uncertaintyWarning.style.display = 'none';
@@ -185,5 +189,13 @@ function showResult(data) {
     impactSection.style.display = 'none';
   }
 
-  addAssistantMessage(t('classifiedMsg')(catLabel(data.label), data.confidence));
+  // On a low-confidence result, proactively ask a clarifying question instead
+  // of just stating a label the model itself isn't sure about.
+  if (data.is_out_of_distribution) {
+    addAssistantMessage(t('oodClarifyMsg'));
+  } else if (data.is_ambiguous && data.runner_up_label) {
+    addAssistantMessage(t('ambiguousClarifyMsg')(catLabel(data.label), catLabel(data.runner_up_label)));
+  } else {
+    addAssistantMessage(t('classifiedMsg')(catLabel(data.label), data.confidence));
+  }
 }

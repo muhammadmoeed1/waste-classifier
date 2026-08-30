@@ -32,6 +32,12 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from waste_classifier.ml.confidence import (
+    TOP2_MARGIN_THRESHOLD,
+    is_out_of_distribution,
+    top2_margin_and_runnerup,
+)
+
 MIN_AREA_FRACTION = 0.015  # ignore contours smaller than 1.5% of the image area
 MAX_AREA_FRACTION = 0.85  # ignore contours that basically span the whole image
 IOU_MERGE_THRESHOLD = 0.4  # drop boxes that overlap an already-kept box this much
@@ -81,6 +87,8 @@ class Detection:
     label: str
     confidence: float
     recyclable: bool
+    is_out_of_distribution: bool = False
+    is_ambiguous: bool = False
 
 
 def _intersection_area(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> int:
@@ -206,6 +214,7 @@ def detect_and_classify(image: Image.Image, classifier) -> list[Detection]:
 
         crop = rgb.crop((x0, y0, x1, y1))
         result = classifier.predict(crop)
+        margin, _, _ = top2_margin_and_runnerup(result.probabilities)
 
         candidates.append(
             Detection(
@@ -213,6 +222,8 @@ def detect_and_classify(image: Image.Image, classifier) -> list[Detection]:
                 label=result.label,
                 confidence=result.confidence,
                 recyclable=result.recyclable,
+                is_out_of_distribution=is_out_of_distribution(result.probabilities),
+                is_ambiguous=margin < TOP2_MARGIN_THRESHOLD,
             )
         )
 
