@@ -142,3 +142,43 @@ class StatsResponse(BaseModel):
     agent_tool_usage: dict[str, int] = Field(
         ..., description="Count of times each agent tool was called, across all agent-mode chats"
     )
+
+
+class ReviewScan(BaseModel):
+    id: int
+    created_at: str
+    mode: str
+    predicted_label: str
+    confidence: float
+    feedback_label: str | None
+    reason: str = Field(..., description="'low_confidence' and/or 'corrected'")
+
+
+class ReviewQueueResponse(BaseModel):
+    scans: list[ReviewScan]
+
+
+class ModelVersionInfo(BaseModel):
+    version: str
+    is_active: bool = Field(..., description="Whether this is the currently-loaded model")
+    overall_accuracy: float | None = None
+    per_class_f1: dict[str, float] = Field(default_factory=dict)
+    num_correction_examples: int | None = Field(
+        None, description="Present only for versions produced by scripts/retrain.py"
+    )
+
+
+class DriftInfo(BaseModel):
+    baseline_accuracy: float | None = Field(
+        None, description="The active model's validation accuracy at training time"
+    )
+    rolling_7day_mean_confidence: float | None = None
+    is_drifting: bool = Field(
+        False, description="rolling_7day_mean_confidence is meaningfully below baseline_accuracy"
+    )
+
+
+class ModelsResponse(BaseModel):
+    active_version: str = Field(..., description="'production' or a v{n} artifacts/models/ version")
+    versions: list[ModelVersionInfo]
+    drift: DriftInfo

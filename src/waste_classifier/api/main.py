@@ -9,7 +9,7 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
 import groq
@@ -33,12 +33,17 @@ from waste_classifier.api.schemas import (
     ConfusionCell,
     DetectionItem,
     DetectResponse,
+    DriftInfo,
     EnvironmentalImpact,
     FeedbackRequest,
     FeedbackResponse,
     HealthResponse,
     LatencyPoint,
+    ModelsResponse,
+    ModelVersionInfo,
     PredictionResponse,
+    ReviewQueueResponse,
+    ReviewScan,
     StatsResponse,
     ToolCall,
     TranscriptionResponse,
@@ -515,9 +520,130 @@ def stats(session: Session = Depends(get_session)) -> StatsResponse:
     )
 
 
+# Matches web/src/constants.js's UNCERTAINTY_THRESHOLD -- kept in sync manually,
+# same as the app's own "not fully sure" warning threshold.
+REVIEW_LOW_CONFIDENCE_THRESHOLD = 60
+
+
+@app.get("/api/scans/review", response_model=ReviewQueueResponse)
+def scans_review(session: Session = Depends(get_session)) -> ReviewQueueResponse:
+    """Scans worth a human look: low-confidence predictions, or ones already
+    corrected via feedback. Metadata only, driving a manual curation
+    workflow -- raw images are never stored (see db/models.py), so this
+    can't surface thumbnails, only point at what needs attention."""
+    scans = session.exec(select(Scan).order_by(Scan.created_at.desc()).limit(500)).all()
+
+    items = []
+    for s in scans:
+        is_low_confidence = s.confidence < REVIEW_LOW_CONFIDENCE_THRESHOLD
+        is_corrected = bool(s.feedback_label) and s.feedback_label != s.predicted_label
+        if not (is_low_confidence or is_corrected):
+            continue
+        reasons = []
+        if is_low_confidence:
+            reasons.append("low_confidence")
+        if is_corrected:
+            reasons.append("corrected")
+        items.append(
+            ReviewScan(
+                id=s.id,
+                created_at=s.created_at.isoformat(),
+                mode=s.mode,
+                predicted_label=s.predicted_label,
+                confidence=s.confidence,
+                feedback_label=s.feedback_label,
+                reason="+".join(reasons),
+            )
+        )
+    return ReviewQueueResponse(scans=items)
+
+
+def _load_version_metrics(metrics_path) -> dict:
+    try:
+        with open(metrics_path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+@app.get("/api/models", response_model=ModelsResponse)
+def models_endpoint(session: Session = Depends(get_session)) -> ModelsResponse:
+    """Compares the production model against any versions produced by
+    scripts/retrain.py (artifacts/models/v*/), plus a drift indicator:
+    rolling 7-day mean confidence vs. the active model's training-time
+    validation accuracy, flagged if it's fallen meaningfully below that
+    baseline."""
+    active_version = config.MODEL_VERSION or "production"
+
+    prod_metrics = _load_version_metrics(config.METRICS_DIR / "metrics.json")
+    versions = [
+        ModelVersionInfo(
+            version="production",
+            is_active=(active_version == "production"),
+            overall_accuracy=prod_metrics.get("accuracy"),
+            per_class_f1={
+                name: v.get("f1", 0.0) for name, v in prod_metrics.get("per_class", {}).items()
+            },
+        )
+    ]
+
+    if config.MODELS_DIR.exists():
+        for version_dir in sorted(config.MODELS_DIR.iterdir()):
+            if not version_dir.is_dir():
+                continue
+            metrics = _load_version_metrics(version_dir / "metrics.json")
+            if not metrics:
+                continue
+            versions.append(
+                ModelVersionInfo(
+                    version=version_dir.name,
+                    is_active=(active_version == version_dir.name),
+                    overall_accuracy=metrics.get("accuracy"),
+                    per_class_f1={
+                        name: v.get("f1", 0.0) for name, v in metrics.get("per_class", {}).items()
+                    },
+                    num_correction_examples=metrics.get("num_correction_examples"),
+                )
+            )
+
+    active_metrics = next((v for v in versions if v.is_active), versions[0])
+    baseline_accuracy = active_metrics.overall_accuracy
+
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    recent_scans = session.exec(select(Scan).where(Scan.created_at >= week_ago)).all()
+    rolling_confidence = (
+        float(np.mean([s.confidence for s in recent_scans])) / 100 if recent_scans else None
+    )
+    is_drifting = (
+        baseline_accuracy is not None
+        and rolling_confidence is not None
+        and rolling_confidence < baseline_accuracy - 0.10
+    )
+
+    return ModelsResponse(
+        active_version=active_version,
+        versions=versions,
+        drift=DriftInfo(
+            baseline_accuracy=baseline_accuracy,
+            rolling_7day_mean_confidence=rolling_confidence,
+            is_drifting=is_drifting,
+        ),
+    )
+
+
 @app.get("/dashboard", include_in_schema=False)
 def dashboard_page() -> FileResponse:
     return FileResponse(config.ROOT_DIR / "web" / "dashboard.html")
+
+
+@app.get("/dashboard/review", include_in_schema=False)
+def dashboard_review_page() -> FileResponse:
+    return FileResponse(config.ROOT_DIR / "web" / "dashboard-review.html")
+
+
+@app.get("/dashboard/models", include_in_schema=False)
+def dashboard_models_page() -> FileResponse:
+    return FileResponse(config.ROOT_DIR / "web" / "dashboard-models.html")
 
 
 # Serve the static frontend (web/) at the root, after API routes are registered.

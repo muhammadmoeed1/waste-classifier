@@ -26,6 +26,16 @@ artifacts/waste_model.keras
 artifacts/waste_model.onnx
 artifacts/waste_model_quant.onnx
 
+# Retrained model versions (scripts/retrain.py) -- same reasoning as above.
+# A version worth keeping should be promoted (copied over the flat production
+# path) or published as its own Release asset, not committed here.
+artifacts/models/
+
+# Human-curated retraining input / its validated output (scripts/build_correction_set.py) --
+# real photos, not something to commit; see that script's docstring.
+data/corrections/
+data/corrections_processed/
+
 # Pretrained YOLOv8n weights (auto-downloaded by ultralytics on first use;
 # re-fetchable from https://github.com/ultralytics/assets, not our own artifact)
 yolov8n.pt

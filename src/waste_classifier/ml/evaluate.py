@@ -18,26 +18,11 @@ import tensorflow as tf
 from waste_classifier import config
 
 
-def main() -> None:
-    # NOTE: shuffle must stay True (the default) here, matching train.py exactly.
-    # image_dataset_from_directory determines the validation_split slice from a
-    # seeded shuffle of the file list; passing shuffle=False disables that
-    # shuffle and instead takes a contiguous alphabetical tail-slice of files,
-    # which (since files are listed one class-directory at a time) silently
-    # drops entire classes from the "validation" set instead of reproducing
-    # the same stratified split used during training.
-    val_ds = tf.keras.utils.image_dataset_from_directory(
-        config.DATASET_DIR,
-        validation_split=0.2,
-        subset="validation",
-        seed=123,
-        image_size=config.IMG_SIZE,
-        batch_size=32,
-    )
-    class_names = val_ds.class_names
-
-    model = tf.keras.models.load_model(config.MODEL_PATH)
-
+def compute_metrics(model, val_ds, class_names: list[str]) -> dict:
+    """Real accuracy + per-class precision/recall/F1/support + confusion
+    matrix for `model` against `val_ds`. Shared with scripts/retrain.py so
+    every model version (production or retrained) reports metrics the same
+    way and stays genuinely comparable on /dashboard/models."""
     y_true, y_pred = [], []
     for images, labels in val_ds:
         preds = model.predict(images, verbose=0)
@@ -69,7 +54,7 @@ def main() -> None:
         for i in range(len(class_names))
     }
 
-    metrics = {
+    return {
         "accuracy": round(float(accuracy), 4),
         "num_validation_samples": int(len(y_true)),
         "per_class": per_class,
@@ -77,14 +62,37 @@ def main() -> None:
         "class_names": class_names,
     }
 
+
+def main() -> None:
+    # NOTE: shuffle must stay True (the default) here, matching train.py exactly.
+    # image_dataset_from_directory determines the validation_split slice from a
+    # seeded shuffle of the file list; passing shuffle=False disables that
+    # shuffle and instead takes a contiguous alphabetical tail-slice of files,
+    # which (since files are listed one class-directory at a time) silently
+    # drops entire classes from the "validation" set instead of reproducing
+    # the same stratified split used during training.
+    val_ds = tf.keras.utils.image_dataset_from_directory(
+        config.DATASET_DIR,
+        validation_split=0.2,
+        subset="validation",
+        seed=123,
+        image_size=config.IMG_SIZE,
+        batch_size=32,
+    )
+    class_names = val_ds.class_names
+
+    model = tf.keras.models.load_model(config.MODEL_PATH)
+    metrics = compute_metrics(model, val_ds, class_names)
+    cm = metrics["confusion_matrix"]
+
     config.METRICS_DIR.mkdir(parents=True, exist_ok=True)
     with open(config.METRICS_DIR / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
 
-    _plot_confusion_matrix(cm, class_names, config.METRICS_DIR / "confusion_matrix.png")
+    _plot_confusion_matrix(np.array(cm), class_names, config.METRICS_DIR / "confusion_matrix.png")
 
-    print(f"Overall accuracy: {accuracy:.2%}")
-    print(json.dumps(per_class, indent=2))
+    print(f"Overall accuracy: {metrics['accuracy']:.2%}")
+    print(json.dumps(metrics["per_class"], indent=2))
     print(f"\nSaved metrics.json and confusion_matrix.png to {config.METRICS_DIR}")
 
 

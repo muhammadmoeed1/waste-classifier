@@ -16,10 +16,22 @@ Image.MAX_IMAGE_PIXELS = 40_000_000
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 # --- Model / classifier ---
-MODEL_PATH = Path(os.getenv("MODEL_PATH", ROOT_DIR / "artifacts" / "waste_model.keras"))
-CLASS_NAMES_PATH = Path(
-    os.getenv("CLASS_NAMES_PATH", ROOT_DIR / "artifacts" / "class_names.json")
-)
+# MODEL_VERSION selects a versioned model from artifacts/models/{version}/
+# (see scripts/retrain.py, which only ever writes new versions there --
+# it never touches the flat production path below). Empty by default so
+# existing deployments are unaffected; set it (e.g. "v2") to try or promote
+# a retrained version without changing MODEL_PATH/CLASS_NAMES_PATH directly.
+MODEL_VERSION = os.getenv("MODEL_VERSION", "")
+MODELS_DIR = ROOT_DIR / "artifacts" / "models"
+
+if MODEL_VERSION:
+    MODEL_PATH = MODELS_DIR / MODEL_VERSION / "waste_model.keras"
+    CLASS_NAMES_PATH = MODELS_DIR / MODEL_VERSION / "class_names.json"
+else:
+    MODEL_PATH = Path(os.getenv("MODEL_PATH", ROOT_DIR / "artifacts" / "waste_model.keras"))
+    CLASS_NAMES_PATH = Path(
+        os.getenv("CLASS_NAMES_PATH", ROOT_DIR / "artifacts" / "class_names.json")
+    )
 IMG_SIZE = (224, 224)
 
 RECYCLABLE_CLASSES = {"cardboard", "glass", "metal", "paper", "plastic"}

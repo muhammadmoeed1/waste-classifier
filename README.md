@@ -252,11 +252,38 @@ model in `artifacts/`).
 ### 3. (Optional) Train / fine-tune the model
 
 ```bash
-python -m waste_classifier.ml.train
-python -m waste_classifier.ml.evaluate
+PYTHONPATH=src python -m waste_classifier.ml.train
+PYTHONPATH=src python -m waste_classifier.ml.evaluate
 ```
 
-### 4. Run the app
+### 4. (Optional) Retrain from user corrections
+
+The "Wrong? Tap the right category" control on a result writes a correction
+to the database, but never stores the actual image (a deliberate privacy/
+storage-cost decision — only a SHA-256 hash of the upload is kept) — so
+turning corrections into training data is a two-step, partly manual process:
+
+```bash
+# 1. Add real example photos under data/corrections/<class_name>/ for
+#    whichever classes scripts/build_correction_set.py tells you need them,
+#    then validate + prepare them:
+PYTHONPATH=src python scripts/build_correction_set.py
+
+# 2. Fine-tune the current production model on the validated set, saving a
+#    new version to artifacts/models/v{n}/ (never overwrites the production
+#    model):
+PYTHONPATH=src python scripts/retrain.py
+
+# 3. Try it locally (or set MODEL_VERSION in .env for a real deploy), or
+#    promote it to production by copying its files over artifacts/waste_model.keras
+#    and artifacts/class_names.json.
+MODEL_VERSION=v1 uvicorn waste_classifier.api.main:app --reload --app-dir src
+```
+
+Compare versions (per-class F1, and a drift check against live traffic) at
+`/dashboard/models`; see what needs a correction at `/dashboard/review`.
+
+### 5. Run the app
 
 ```bash
 uvicorn waste_classifier.api.main:app --reload --app-dir src
@@ -265,14 +292,14 @@ uvicorn waste_classifier.api.main:app --reload --app-dir src
 Open http://127.0.0.1:8000 — interactive API docs are at
 http://127.0.0.1:8000/docs.
 
-### 5. Run tests
+### 6. Run tests
 
 ```bash
 pytest
 ruff check src tests
 ```
 
-### 6. Run with Docker
+### 7. Run with Docker
 
 ```bash
 docker compose up --build

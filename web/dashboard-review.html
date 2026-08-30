@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review Queue · Smart Waste Classifier</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1d9e75">
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/dashboard.css">
+</head>
+<body>
+<div class="container dashboard-container">
+
+  <div class="top-controls">
+    <a href="/dashboard" class="icon-toggle" title="Back to dashboard" aria-label="Back to dashboard"><i class="fas fa-arrow-left"></i></a>
+    <button id="themeToggle" class="icon-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+      <i class="fas fa-moon"></i>
+    </button>
+  </div>
+
+  <div class="header">
+    <div class="logo-ring"><i class="fas fa-magnifying-glass"></i></div>
+    <h1>Review Queue</h1>
+    <p>Scans worth a second look: low-confidence predictions and ones a user already corrected. Raw images aren't stored, so this points you at what to go collect real examples for -- see <code>scripts/build_correction_set.py</code>.</p>
+  </div>
+
+  <div id="reviewEmpty" class="card dash-empty" style="display:none;">
+    <i class="fas fa-circle-check"></i>
+    <p>Nothing needs review right now.</p>
+  </div>
+
+  <div class="card" id="reviewTableCard" style="display:none;">
+    <div id="reviewTableWrap"></div>
+  </div>
+
+</div>
+
+<script type="module" src="/src/dashboard/review.js"></script>
+</body>
+</html>

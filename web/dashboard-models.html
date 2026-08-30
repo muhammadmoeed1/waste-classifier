@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Versions · Smart Waste Classifier</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1d9e75">
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/dashboard.css">
+</head>
+<body>
+<div class="container dashboard-container">
+
+  <div class="top-controls">
+    <a href="/dashboard" class="icon-toggle" title="Back to dashboard" aria-label="Back to dashboard"><i class="fas fa-arrow-left"></i></a>
+    <button id="themeToggle" class="icon-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+      <i class="fas fa-moon"></i>
+    </button>
+  </div>
+
+  <div class="header">
+    <div class="logo-ring"><i class="fas fa-code-compare"></i></div>
+    <h1>Model Versions</h1>
+    <p>Production vs. any versions produced by <code>scripts/retrain.py</code>, plus a drift check against live traffic.</p>
+  </div>
+
+  <div class="card" id="driftCard"></div>
+
+  <div class="card">
+    <div class="section-label"><i class="fas fa-table-cells"></i> Per-class F1 by version</div>
+    <div id="modelsTableWrap"></div>
+  </div>
+
+</div>
+
+<script type="module" src="/src/dashboard/models.js"></script>
+</body>
+</html>
