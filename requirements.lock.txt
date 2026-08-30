@@ -200,6 +200,8 @@ protobuf==7.36.0
     #   tf2onnx
 psutil==7.2.2
     # via ultralytics
+psycopg2-binary==2.9.12
+    # via -r requirements.txt
 pydantic==2.13.4
     # via
     #   -r requirements.txt

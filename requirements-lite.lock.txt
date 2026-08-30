@@ -110,6 +110,8 @@ pillow==12.3.0
     # via -r requirements-lite.txt
 protobuf==7.36.0
     # via tensorflow
+psycopg2-binary==2.9.12
+    # via -r requirements-lite.txt
 pydantic==2.13.4
     # via
     #   -r requirements-lite.txt

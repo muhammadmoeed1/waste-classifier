@@ -25,8 +25,10 @@ pydantic
 python-dotenv
 slowapi
 
-# Persistence
+# Persistence (psycopg2-binary is only actually imported when DATABASE_URL
+# points at Postgres, e.g. in production -- local/dev SQLite doesn't need it)
 sqlmodel
+psycopg2-binary
 
 # GenAI
 groq

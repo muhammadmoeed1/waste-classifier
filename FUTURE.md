@@ -1,9 +1,9 @@
-# Future ideas (out of scope for the task that created this file)
+# Future ideas
 
-Ideas noticed while implementing a specific task but not built, per the "don't add
-scope beyond what's listed" rule. Captured here instead so they aren't lost.
+Ideas noticed while building a specific feature but deliberately not built (to
+avoid scope creep on the task at hand). Captured here instead of lost.
 
-## From Phase 3.3 (localized PK disposal guidance)
+## Pakistan-localized disposal guidance
 
 - **Per-request region override.** `REGION` is currently a deploy-time env toggle
   (like `RAG_BACKEND`) — one running instance serves one region. A `region` field

@@ -4,7 +4,7 @@ AI-powered waste classification with a Groq-backed recycling assistant — uploa
 photo, get an instant category prediction from a fine-tuned MobileNetV2 model, and
 ask a RAG-grounded chatbot follow-up questions about how to recycle it.
 
-**Live demo:** _deploying now — see [DEPLOYMENT.md](DEPLOYMENT.md) to run your own copy in minutes_
+**Live demo:** _not yet deployed — see [DEPLOYMENT.md](DEPLOYMENT.md) to run your own copy in minutes_
 
 ![CI](https://github.com/muhammadmoeed1/waste-classifier/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
@@ -43,6 +43,19 @@ ask a RAG-grounded chatbot follow-up questions about how to recycle it.
 7. **Installable as an app** — the frontend is a Progressive Web App (manifest +
    service worker), so it can be added to a phone's home screen and used like
    a native app.
+8. **Wrong? Tap the right category.** A correction closes the loop back into
+   the model: it's recorded (never the image itself — only a hash), reviewable
+   at `/dashboard/review`, and feeds a real fine-tuning pipeline
+   (`scripts/retrain.py`) that produces a new, independently-versioned model
+   compared against production at `/dashboard/models`.
+9. **Real traffic, not a mockup.** `/dashboard` is driven entirely by actual
+   scans and chats — class distribution vs. the training set, a confidence
+   histogram, latency by mode, and agent tool-usage frequency.
+10. **Localized for where it's actually used.** Outside the US/EU, most waste
+    has no kerbside recycling program — what exists is an informal
+    scrap-dealer ("kabaria") resale economy. Setting `REGION=pk` swaps in
+    Pakistan-specific disposal guidance and a resale-value estimator, instead
+    of assuming infrastructure that isn't there.
 
 ## Architecture
 
@@ -95,12 +108,15 @@ of the connection just dropping silently.
 | Backend API         | FastAPI, Pydantic, Uvicorn                                          |
 | Generative AI       | Groq API (`openai/gpt-oss-120b`) — streaming chat, **tool-calling agent**, + Whisper speech-to-text |
 | Retrieval (RAG)     | Sentence-transformer embeddings (`all-MiniLM-L6-v2`) + FAISS vector search over a markdown knowledge base |
-| Frontend            | Vanilla HTML/CSS/JS, live camera (MediaRecorder/getUserMedia), server-sent streaming chat |
-| PWA                  | Web app manifest + service worker — installable, offline-capable app shell |
-| i18n                 | English / Urdu UI with RTL layout, bilingual AI assistant           |
-| Testing             | Pytest, FastAPI TestClient                                           |
+| Frontend            | Vanilla HTML/CSS/JS in native ES modules (no bundler), live camera (MediaRecorder/getUserMedia), server-sent streaming chat |
+| Persistence         | SQLModel — SQLite for local dev, Postgres in production; every scan/chat turn logged, feedback-correctable, never the raw image |
+| Retraining pipeline  | Feedback corrections &rarr; validated training set &rarr; fine-tuned + versioned model &rarr; compared against production, with drift detection |
+| Localization        | Region-aware knowledge base + system prompt (`generic` / `pk`), English/Urdu UI with RTL layout, bilingual AI assistant |
+| Hardening           | Rate limiting (slowapi), upload size/content-type/decompression-bomb guards, real SSE error frames, CORS fixed to spec |
+| PWA                  | Self-hosted fonts/icons + web app manifest + service worker — installable, genuinely offline-capable app shell |
+| Testing             | Pytest, FastAPI TestClient — 90+ tests                                |
 | Quality             | Ruff (lint)                                                          |
-| Packaging / deploy  | Docker (full + memory-optimized lite profile), GitHub Actions CI/CD |
+| Packaging / deploy  | Docker (full + memory-optimized lite profile), pinned lockfiles, GitHub Actions CI/CD (lint + test + image build) |
 
 ## Explainable AI: Grad-CAM
 
@@ -122,6 +138,8 @@ and autonomously decides which to call, with what arguments, before responding:
 - `lookup_recycling_guide(material)` — pulls the curated knowledge-base entry
 - `estimate_environmental_impact(material, weight_kg)` — computes real CO₂ savings
 - `check_recyclability(material)` — quick true/false lookup
+- `estimate_resale_value(material, weight_kg)` — approximate local scrap-dealer
+  value in PKR (only meaningful under `REGION=pk` — see below)
 
 Example (real output, not scripted): asked *"How much CO2 do I save recycling
 2kg of aluminum cans? Also, can I recycle a greasy pizza box?"*, the agent
@@ -130,6 +148,34 @@ weight_kg=2 → 18kg CO2 saved) and `lookup_recycling_guide` (material=paper),
 then combined both results into one answer — a genuine multi-step agent loop
 (`src/waste_classifier/genai/agent.py`), not a single scripted RAG lookup. The
 UI shows a small trace of which tools were used for each answer.
+
+## Localized for Pakistan: the *kabaria* resale economy
+
+Most waste-classifier projects (this one included, at first) implicitly
+assume Western kerbside recycling infrastructure — a blue bin the city
+collects. That doesn't exist across most of Pakistan. What exists instead is
+a real, active informal economy: a *kabaria* (scrap/waste-material buyer) who
+pays by weight for what's actually resalable.
+
+Setting `REGION=pk` (default is `generic`, so this is fully opt-in) swaps in:
+
+- **`data/knowledge_base/pk/`** — per-material guidance on what a kabaria
+  actually buys (aluminum cans are the most valuable household item, roughly
+  200-350 PKR/kg; cardboard/paper sell as *"raddi"*; most glass has no local
+  resale market at all) instead of assuming curbside bins, with illustrative
+  PKR/kg rates and honest "no local buyer for this" notes where that's the
+  reality — written bilingually (English + an Urdu summary per material).
+- **A resale-value agent tool** (`estimate_resale_value`) and a matching
+  addendum to both the RAG and agent system prompts, so the assistant
+  reasons about *"what's this worth to a kabaria"* instead of *"which bin
+  does this go in."*
+- **`ml/impact.py`'s `resale_pkr_per_kg`** alongside the existing CO₂ figures
+  — the same environmental-impact data structure, extended rather than
+  duplicated.
+
+This is a config toggle, not a fork: the same codebase, model, and UI serve
+either region — set `REGION=pk` in `.env`, or leave it unset for the default
+`generic` knowledge base.
 
 ## Multi-item detection
 
@@ -238,25 +284,111 @@ class (only ~137 source images total) — both realistic, well-understood
 failure modes rather than random error, and the clearest targets for further
 improvement (more trash images, or a higher-capacity backbone).
 
+## Feedback-driven retraining pipeline
+
+A deployed classifier's real-world accuracy drifts from its validation-set
+number as live traffic diverges from the training distribution — most
+portfolio projects never address this. Here, a correction closes the loop:
+
+1. **Capture** — "Wrong? Tap the right category" on a result writes a
+   correction to the database (`feedback_label` on the `Scan` row). Raw
+   images are **never stored**, by design (see Privacy below) — only a
+   SHA-256 hash — so this is metadata, not a training image.
+2. **Review** — `/dashboard/review` lists every low-confidence or corrected
+   scan, telling you which classes need real example photos collected.
+3. **Prepare** — `scripts/build_correction_set.py` validates a human-curated
+   `data/corrections/<class>/` directory of real photos against the model's
+   known classes, and reports coverage against step 2's pending corrections.
+4. **Retrain** — `scripts/retrain.py` fine-tunes the current production model
+   at a low learning rate on the validated set (reusing `ml/train.py`'s
+   class-weighting, not reimplementing it), and always saves a **new,
+   independently versioned model** under `artifacts/models/v{n}/` — it never
+   overwrites the production model.
+5. **Compare** — `/dashboard/models` shows per-class F1 across every version
+   side by side, plus a **drift indicator**: rolling 7-day mean confidence
+   on live traffic vs. the active model's training-time accuracy, flagged if
+   it's fallen meaningfully behind.
+6. **Promote** — set `MODEL_VERSION=v{n}` to try a version in place, or copy
+   its files over the production path once you're confident in it.
+
+Every threshold and mechanism above (the entropy/margin numbers, the
+per-class F1 comparison logic) is grounded in real, rerunnable analysis —
+`scripts/tune_ood_threshold.py` and `ml/evaluate.py`'s `compute_metrics` are
+shared between the original training run and every retrained version, so
+numbers stay genuinely comparable rather than each version inventing its own
+metric.
+
+## Production hardening
+
+Built to survive a public URL, not just a demo:
+
+- **Rate limiting** (`slowapi`) on every endpoint that does real work —
+  classification, chat, transcription — keyed by client IP.
+- **Upload guards**: a `Content-Length` pre-check rejects an oversized file
+  before reading any of it, chunked bounded reads for the rest, a
+  content-type allowlist, and a `PIL.Image.MAX_IMAGE_PIXELS` cap against
+  decompression-bomb PNGs.
+- **Real error handling on the Groq path**: a 502/504 with a useful `detail`
+  instead of a bare 500, and genuine Server-Sent Events on the streaming
+  endpoint (`event: token` / `event: error` / `event: done`) so a mid-stream
+  upstream failure surfaces as a visible error instead of a silently
+  truncated response.
+- **Fixed a real concurrency bug**: `/api/predict` and `/api/detect` were
+  `async def` around synchronous, CPU-bound TensorFlow/OpenCV work — on the
+  event loop directly, that blocks *every* concurrent request, including
+  `/health`, while one prediction runs. Sync `def` handlers let FastAPI
+  offload them to a thread pool instead.
+- **CORS fixed to spec**: `allow_credentials=True` with a wildcard origin is
+  an invalid combination browsers reject anyway, and unnecessary here (no
+  cookies/session auth is used).
+
+90+ tests cover this behavior directly — see `tests/test_hardening.py`,
+`tests/test_concurrency.py`, `tests/test_sse.py`.
+
+## Analytics dashboard
+
+`/dashboard` is driven entirely by real `Scan`/`ChatTurn` rows, not
+placeholder data: hero stats (total scans, mean confidence, % recyclable,
+p50/p95 latency), a class-distribution chart compared against the TrashNet
+training distribution, a confidence histogram, a model-vs-human agreement
+table built from actual corrections, and per-mode latency (where the
+Keras-vs-ONNX serving split becomes visible). `/dashboard/review` and
+`/dashboard/models` are described above.
+
+## Privacy
+
+Every scan and chat turn is logged for the dashboard/retraining pipeline
+above, keyed by an anonymous, client-generated session ID stored in
+`localStorage` — never an account or any identity. **Raw uploaded images are
+never persisted** — only a SHA-256 hash, so a repeated identical upload is
+recognizable without the pixels themselves ever touching disk beyond the
+request that classified them. This was a deliberate constraint kept even
+where it makes the retraining pipeline (above) more manual than it could
+otherwise be.
+
 ## Project structure
 
 ```
 waste-classifier/
 ├── src/waste_classifier/
-│   ├── api/            # FastAPI app, routes, request/response schemas
-│   ├── ml/              # training, evaluation, inference, Grad-CAM, impact facts
-│   ├── genai/           # Groq client + recycling assistant + Whisper transcription
-│   ├── rag/             # knowledge base loader + embeddings/FAISS retriever (TF-IDF fallback)
-│   └── config.py        # centralized configuration (env-driven)
+│   ├── api/              # FastAPI app, routes, request/response schemas, input validation
+│   ├── ml/               # training, evaluation, inference (Keras + ONNX), Grad-CAM,
+│   │                     #   multi-item detection, confidence/OOD routing, impact facts
+│   ├── genai/            # Groq client + recycling assistant + agent + Whisper transcription
+│   ├── rag/              # knowledge base loader + embeddings/FAISS retriever (TF-IDF fallback)
+│   ├── db/               # SQLModel schema (Scan, ChatTurn) + engine/session factory
+│   └── config.py         # centralized configuration (env-driven)
+├── scripts/              # fetch_artifacts, build_correction_set, retrain, tune_ood_threshold
 ├── data/
 │   ├── dataset/          # TrashNet images (download separately, see below)
-│   └── knowledge_base/   # markdown recycling knowledge base (used for RAG)
+│   └── knowledge_base/   # markdown recycling knowledge base (used for RAG), incl. pk/ variant
 ├── artifacts/            # trained model, class names, metrics, confusion matrix
-├── web/                  # static frontend (upload UI + chat widget)
-├── tests/                # pytest suite (classifier, RAG, API)
-├── docker/Dockerfile
+│   └── models/           # versioned retrained models (scripts/retrain.py output)
+├── web/                  # static frontend: classifier UI + dashboard, native ES modules
+├── tests/                # pytest suite — 90+ tests across the API, ML, RAG, and scripts
+├── docker/               # Dockerfile (full) + Dockerfile.lite (free-tier)
 ├── docker-compose.yml
-└── .github/workflows/    # CI (tests + lint)
+└── .github/workflows/    # CI (lint + test + a build of the actual deployable image)
 ```
 
 ## Running locally
@@ -341,8 +473,12 @@ Two Docker profiles are included: the full app (`docker/Dockerfile`) and a
 **lightweight profile** (`docker/Dockerfile.lite`) sized for free-tier hosts with
 limited RAM — it swaps the embeddings+FAISS RAG retriever for a TF-IDF fallback,
 disables Grad-CAM, and tunes TensorFlow's thread pools, cutting peak memory from
-~560MB to ~220MB per request. See [DEPLOYMENT.md](DEPLOYMENT.md) for the full
-deployment guide (Render, recommended and free with no card required).
+~560MB to ~220MB per request. Model weights are fetched from a GitHub Release
+at build time (`scripts/fetch_artifacts.py`), not committed to git. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide (Render,
+recommended and free with no card required) — production uses **Postgres**,
+not SQLite, since free-tier hosts have an ephemeral filesystem that would
+lose all scan/feedback history on every redeploy.
 
 ## What I learned / engineering notes
 
@@ -395,6 +531,23 @@ deployment guide (Render, recommended and free with no card required).
 - Voice input reuses the same Groq account for speech-to-text (Whisper), so the
   whole GenAI surface — chat, RAG, and transcription — runs through one
   provider and one API key.
+- An actual WCAG contrast audit (computing real luminance ratios, not eyeballing
+  it) caught a genuine accessibility bug: white button/chat-bubble text on the
+  brand accent color was only ~2.6-3.4:1 in the two themes, below the 4.5:1
+  minimum for normal-weight text. Fixed with dedicated, contrast-checked button
+  tokens rather than assuming a brand color choice was automatically accessible.
+- Entropy-based out-of-distribution detection sounds more robust than it is in
+  practice: feeding the trained model pure random noise doesn't reliably
+  produce high-entropy (uncertain-looking) output — a model can be *confidently
+  wrong* on an input it's never seen, which a single heuristic won't catch.
+  Documented that limitation directly rather than overselling the feature.
+- The "never store the uploaded image" privacy decision had a real
+  downstream cost surfaced later: the retraining pipeline can't auto-export
+  training images from past corrections, because there's nothing to export.
+  Kept the constraint anyway and designed the pipeline around it (a review
+  queue that tells a human what to go collect, rather than pretending
+  otherwise) instead of quietly walking back the privacy tradeoff under
+  pressure to make the feature more automatic.
 
 ## Acknowledgments
 
